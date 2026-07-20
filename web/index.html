@@ -2,14 +2,13 @@
 <html lang="fr">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <title>NOVA WALL — Command Center</title>
 <style>
 :root{
   --bg:#06080d; --panel:#0b1120; --panel2:#0e1526; --border:#1b2740; --border2:#25324f;
   --txt:#c9d6ee; --dim:#6b7a9c; --dimmer:#48566f;
   --cyan:#22d3ee; --amber:#f5b301; --green:#34d399; --red:#f43f5e; --violet:#a78bfa; --pink:#f472b6;
-  --glow:0 0 0 1px rgba(34,211,238,.15), 0 8px 30px rgba(0,0,0,.5);
 }
 *{box-sizing:border-box}
 html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);
@@ -20,201 +19,224 @@ body{background:
   radial-gradient(900px 500px at 10% 110%, rgba(167,139,250,.05), transparent 60%),
   linear-gradient(#06080d,#05070c);}
 .mono{font-family:"SF Mono","JetBrains Mono",ui-monospace,Menlo,monospace}
-
-/* ---- top bar ---- */
-header{display:flex;align-items:center;gap:14px;padding:10px 16px;border-bottom:1px solid var(--border);
-  background:linear-gradient(180deg,rgba(13,18,32,.9),rgba(8,11,20,.6));backdrop-filter:blur(8px);
-  position:relative;z-index:40}
-.brand{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:.5px}
-.brand .dot{width:10px;height:10px;border-radius:50%;background:var(--green);
-  box-shadow:0 0 12px var(--green);animation:pulse 2s infinite}
-.brand small{color:var(--dim);font-weight:500;letter-spacing:.3px}
+header{display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--border);
+  background:linear-gradient(180deg,rgba(13,18,32,.92),rgba(8,11,20,.6));backdrop-filter:blur(8px);z-index:40;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:9px;font-weight:700;letter-spacing:.5px}
+.brand .dot{width:10px;height:10px;border-radius:50%;background:var(--green);box-shadow:0 0 12px var(--green);animation:pulse 2s infinite}
+.brand small{color:var(--dim);font-weight:500}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
-.stat{display:flex;gap:16px;margin-left:6px;color:var(--dim);font-size:12px}
-.stat b{color:var(--txt)}
+.stat{display:flex;gap:14px;color:var(--dim);font-size:12px}.stat b{color:var(--txt)}
 .spacer{flex:1}
-.ctrl{display:flex;align-items:center;gap:8px}
+.ctrl{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
 button,select,input{font:inherit;color:var(--txt);background:var(--panel2);border:1px solid var(--border2);
-  border-radius:9px;padding:7px 11px;cursor:pointer;transition:.15s}
-button:hover,select:hover{border-color:var(--cyan);box-shadow:0 0 0 1px rgba(34,211,238,.2)}
+  border-radius:9px;padding:7px 10px;cursor:pointer;transition:.15s}
+button:hover,select:hover{border-color:var(--cyan)}
 button.on{background:rgba(34,211,238,.14);border-color:var(--cyan);color:#dffaff}
 button.primary{background:linear-gradient(180deg,#12a3bd,#0c7f96);border-color:#1fb6d1;color:#eafcff;font-weight:600}
 .seg{display:flex;background:var(--panel2);border:1px solid var(--border2);border-radius:9px;overflow:hidden}
-.seg button{border:0;border-radius:0;background:transparent;padding:7px 10px}
+.seg button{border:0;border-radius:0;background:transparent;padding:7px 9px}
 .seg button.on{background:rgba(34,211,238,.16)}
-
-/* ---- wall grid ---- */
-#stage{position:absolute;inset:56px 0 0 0;overflow:auto}
-#wall{display:grid;gap:12px;padding:14px;min-height:100%;
-  grid-template-columns:repeat(var(--cols,3),1fr);align-content:start}
+#stage{position:absolute;inset:54px 0 0 0;overflow:auto}
+#wall{display:grid;gap:12px;padding:14px;min-height:100%;grid-template-columns:repeat(var(--cols,3),1fr);align-content:start}
 .tile{position:relative;background:linear-gradient(180deg,var(--panel),var(--panel2));
   border:1px solid var(--border);border-radius:14px;overflow:hidden;display:flex;flex-direction:column;
-  min-height:210px;box-shadow:var(--glow);transition:.18s}
-.tile:hover{border-color:var(--border2);transform:translateY(-1px)}
-.tile.idle{opacity:.62;filter:saturate(.6)}
-.tile.dead{opacity:.4}
-.tile.sel{border-color:var(--amber);box-shadow:0 0 0 2px rgba(245,179,1,.35),0 8px 30px rgba(0,0,0,.6)}
+  min-height:230px;box-shadow:0 8px 30px rgba(0,0,0,.4);transition:border-color .18s,transform .18s}
+.tile:hover{transform:translateY(-1px)}
+.tile.idle{opacity:.6;filter:saturate(.6)} .tile.dead{opacity:.4}
+.tile.sel{border-color:var(--amber);box-shadow:0 0 0 2px rgba(245,179,1,.35)}
 .tile.linksrc{border-color:var(--cyan);box-shadow:0 0 0 2px rgba(34,211,238,.4)}
-.tile.managed{border-color:#22406a}
-.thead{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--border);
-  background:rgba(0,0,0,.25)}
+.tile.managed{border-color:#2a4a72}
+.thead{display:flex;align-items:center;gap:7px;padding:8px 10px;border-bottom:1px solid var(--border);background:rgba(0,0,0,.28)}
 .led{width:8px;height:8px;border-radius:50%;background:var(--dimmer);flex:none}
 .led.live{background:var(--green);box-shadow:0 0 8px var(--green);animation:pulse 1.8s infinite}
 .led.hot{background:var(--amber);box-shadow:0 0 8px var(--amber)}
-.tid{font-size:11px;color:var(--dim);font-weight:600}
-.proj{font-size:12px;font-weight:700;color:#e6eefc;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:130px}
-.badge{font-size:10px;padding:2px 7px;border-radius:20px;border:1px solid var(--border2);color:var(--dim);white-space:nowrap}
-.badge.model{font-weight:700}
+.ttl{font-size:13px;font-weight:700;color:#eaf1ff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:40px}
+.tid{font-size:10.5px;color:var(--dimmer)}
+.tag{font-size:10px;padding:2px 6px;border-radius:20px;border:1px solid var(--border2);color:var(--dim);white-space:nowrap}
+.tag.mgd{color:#bff3fb;border-color:#1f6b7a;background:rgba(34,211,238,.1)}
+.tag.cam{color:var(--dimmer)}
+.tag.cli{color:#ffd7ec;border-color:#5a2f4a;background:rgba(244,114,182,.08)}
+.badge{font-size:10px;padding:2px 7px;border-radius:20px;border:1px solid var(--border2);font-weight:700;white-space:nowrap}
 .b-Opus{color:#ffe9a8;border-color:#5a4a12;background:rgba(245,179,1,.1)}
 .b-Sonnet{color:#bff3fb;border-color:#12505a;background:rgba(34,211,238,.1)}
-.b-Fable{color:#e5dcff;border-color:#3d2f6a;background:rgba(167,139,250,.12)}
+.b-Fable,.b-Opus\+\ dnGrok{color:#e5dcff;border-color:#3d2f6a;background:rgba(167,139,250,.12)}
 .b-Grok{color:#ffd7ec;border-color:#6a2f52;background:rgba(244,114,182,.12)}
 .b-GLM,.b-Haiku{color:#c7f6d9;border-color:#1c5a3a;background:rgba(52,211,153,.1)}
-.b-client{color:#ffd7ec;border-color:#5a2f4a;background:rgba(244,114,182,.08)}
-.tbody{flex:1;padding:10px 11px;overflow:hidden;position:relative}
-.goal{font-size:12.5px;line-height:1.4;color:#d8e2f4;max-height:70px;overflow:hidden}
-.feed{margin-top:8px}
-.chip{display:inline-block;font-size:10.5px;padding:2px 7px;margin:2px 3px 0 0;border-radius:6px;
-  background:rgba(52,211,153,.08);border:1px solid #1c5a3a;color:#a9edc7}
+.tbody{flex:1;padding:9px 10px;overflow:hidden;position:relative;display:flex;flex-direction:column;gap:7px}
+.goal{font-size:12.5px;line-height:1.4;color:#d8e2f4;max-height:74px;overflow:hidden}
+.chip{display:inline-block;font-size:10.5px;padding:2px 7px;margin:2px 3px 0 0;border-radius:6px;background:rgba(52,211,153,.08);border:1px solid #1c5a3a;color:#a9edc7}
 .chip.blk{background:rgba(244,63,94,.08);border-color:#5a1c2a;color:#ffb3c0}
-pre.cam{margin:0;font-size:10.5px;line-height:1.35;color:#8affc0;background:#03060a;
-  border-radius:8px;padding:8px;max-height:120px;overflow:hidden;white-space:pre-wrap;
-  border:1px solid #10251a;text-shadow:0 0 4px rgba(52,211,153,.25)}
-.scan{position:absolute;inset:0;pointer-events:none;background:
-  repeating-linear-gradient(0deg,rgba(255,255,255,.015) 0 1px,transparent 1px 3px)}
-.tfoot{display:flex;align-items:center;gap:6px;padding:7px 9px;border-top:1px solid var(--border);
-  background:rgba(0,0,0,.28)}
-.tfoot select{padding:4px 6px;font-size:11px;border-radius:7px;flex:1;min-width:0}
-.icon{padding:5px 7px;font-size:12px;line-height:1;border-radius:7px}
+pre.cam{margin:0;font-size:10.5px;line-height:1.36;background:#03060a;border-radius:8px;padding:8px;
+  flex:1;min-height:80px;max-height:150px;overflow:hidden;white-space:pre-wrap;border:1px solid #10251a;color:#8affc0}
+.writerow{display:flex;gap:6px;align-items:center}
+.writerow input{flex:1;min-width:0;padding:7px 9px;font-size:12px;background:#0a1220;border-color:#233b57}
+.writerow input:focus{outline:none;border-color:var(--cyan)}
+.writerow button{padding:7px 10px;font-size:12px}
+.camnote{font-size:11px;color:var(--dimmer);display:flex;align-items:center;gap:6px}
+.tfoot{display:flex;align-items:center;gap:6px;padding:7px 9px;border-top:1px solid var(--border);background:rgba(0,0,0,.3)}
+.tfoot select{padding:5px 7px;font-size:11px;border-radius:7px;max-width:130px}
+.icon{padding:5px 8px;font-size:12px;line-height:1;border-radius:7px}
+.icon.on{background:rgba(245,179,1,.16);border-color:var(--amber);color:#ffe9a8}
+.icon.actg:hover{border-color:var(--green)} .icon.actr:hover{border-color:var(--red)} .icon.acty:hover{border-color:var(--amber)}
 .age{font-size:10px;color:var(--dimmer);margin-left:auto}
-
-/* ---- arrows overlay ---- */
+body.listmode #arrows{display:none}
+body.listmode #wall{grid-template-columns:1fr!important;gap:8px;max-width:1180px;margin:0 auto}
+body.listmode .tile{min-height:auto}
+body.listmode .tbody{padding:8px 12px;gap:5px}
+body.listmode .tbody pre.cam{max-height:58px}
+body.listmode .goal{max-height:40px}
 #arrows{position:absolute;inset:0;pointer-events:none;z-index:20}
 #arrows path{pointer-events:stroke;cursor:pointer}
-
-/* ---- port dots for linking ---- */
-.tile .port{position:absolute;right:8px;top:8px;z-index:5}
-
-/* ---- modal ---- */
-.overlay{position:fixed;inset:0;background:rgba(3,5,10,.72);backdrop-filter:blur(4px);
-  display:none;align-items:center;justify-content:center;z-index:60}
+.overlay{position:fixed;inset:0;background:rgba(3,5,10,.74);backdrop-filter:blur(4px);display:none;align-items:center;justify-content:center;z-index:60}
 .overlay.show{display:flex}
-.modal{width:min(560px,92vw);background:linear-gradient(180deg,var(--panel),#0a0f1c);
+.modal{width:min(760px,94vw);max-height:90vh;overflow:auto;background:linear-gradient(180deg,var(--panel),#0a0f1c);
   border:1px solid var(--border2);border-radius:18px;padding:20px;box-shadow:0 30px 80px rgba(0,0,0,.7)}
-.modal h3{margin:0 0 14px;font-size:16px}
+.modal h3{margin:0 0 12px;font-size:16px}
 .modal label{display:block;font-size:12px;color:var(--dim);margin:12px 0 5px}
 .modal input,.modal select{width:100%;padding:10px}
-.modal .row{display:flex;gap:10px}
-.modal .row>*{flex:1}
-.modal .actions{display:flex;gap:10px;justify-content:flex-end;margin-top:18px}
-.hint{font-size:11px;color:var(--dimmer);margin-top:6px;line-height:1.4}
-.toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);z-index:80;
-  background:#0d1526;border:1px solid var(--border2);padding:11px 18px;border-radius:12px;
-  color:#dff;box-shadow:0 10px 40px rgba(0,0,0,.6);opacity:0;transition:.25s;font-size:13px}
+.modal .row{display:flex;gap:10px}.modal .row>*{flex:1}
+.modal .actions{display:flex;gap:10px;justify-content:flex-end;margin-top:16px;flex-wrap:wrap}
+.hint{font-size:11.5px;color:var(--dimmer);margin-top:6px;line-height:1.5}
+.help-b{background:rgba(34,211,238,.05);border:1px solid var(--border2);border-radius:12px;padding:12px 14px;margin:10px 0;font-size:13px;line-height:1.6}
+.help-b b{color:#eaf1ff}
+.k-inject{color:var(--cyan)}.k-bridge{color:var(--amber)}.k-learn{color:var(--violet)}
+.toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);z-index:80;background:#0d1526;border:1px solid var(--border2);
+  padding:11px 18px;border-radius:12px;color:#dff;box-shadow:0 10px 40px rgba(0,0,0,.6);opacity:0;transition:.25s;font-size:13px;max-width:90vw;text-align:center}
 .toast.show{opacity:1}
 .empty{grid-column:1/-1;text-align:center;color:var(--dim);padding:60px}
-/* link-type picker */
-.picker{position:fixed;z-index:70;background:#0c1424;border:1px solid var(--border2);border-radius:12px;
-  padding:6px;display:none;box-shadow:0 20px 60px rgba(0,0,0,.6)}
+.picker{position:fixed;z-index:70;background:#0c1424;border:1px solid var(--border2);border-radius:12px;padding:6px;display:none;box-shadow:0 20px 60px rgba(0,0,0,.6)}
 .picker.show{display:block}
-.picker button{display:flex;gap:10px;width:220px;text-align:left;background:transparent;border:0;padding:9px 10px;border-radius:8px}
+.picker button{display:block;width:230px;text-align:left;background:transparent;border:0;padding:9px 10px;border-radius:8px}
 .picker button:hover{background:rgba(34,211,238,.12)}
 .picker b{font-size:12.5px}.picker span{font-size:11px;color:var(--dim)}
+#zterm{font-size:12px;line-height:1.4;background:#03060a;border:1px solid #10251a;border-radius:10px;padding:12px;
+  max-height:48vh;overflow:auto;white-space:pre-wrap;color:#8affc0}
+@media (max-width:760px){
+  #wall{grid-template-columns:1fr!important;gap:10px;padding:10px}
+  .tile{min-height:auto}
+  header{gap:8px} .stat{display:none}
+  .ctrl input{width:120px} pre.cam{max-height:200px}
+}
 </style>
 </head>
 <body>
 <header>
   <div class="brand"><span class="dot"></span>NOVA&nbsp;WALL <small>· command center</small></div>
   <div class="stat">
-    <span><b id="n-live">0</b> live</span>
-    <span><b id="n-tot">0</b> sessions</span>
-    <span><b id="n-mgd">0</b> gérés</span>
+    <span><b id="n-live">0</b> live</span><span><b id="n-tot">0</b> sessions</span><span><b id="n-mgd">0</b> gérés</span>
   </div>
   <div class="spacer"></div>
   <div class="ctrl">
-    <input id="filter" placeholder="filtrer (client, dossier…)" style="width:170px">
+    <input id="filter" placeholder="filtrer…" style="width:130px">
     <div class="seg" id="gridseg">
-      <button data-c="2">2×2</button><button data-c="3" class="on">3×3</button>
-      <button data-c="4">4×4</button><button data-c="5">5×</button>
+      <button data-c="2">2×2</button><button data-c="3" class="on">3×3</button><button data-c="4">4×4</button><button data-c="5">5×</button>
     </div>
+    <button id="btn-list" title="Vue liste (projets + vert/rouge)">📋 Liste</button>
     <button id="btn-link" title="Mode liaison n8n">🔗 Liaisons</button>
     <button id="btn-fuse" title="Fusionner 2 sessions">⧉ Fusion</button>
+    <button id="btn-help" title="Comment ça marche">❓</button>
     <button id="btn-new" class="primary">＋ Terminal</button>
-    <button id="btn-pop" title="Détacher sur un 2ᵉ écran">⧉⧉</button>
+    <button id="btn-pop" title="2ᵉ écran">⧉⧉</button>
   </div>
 </header>
 
-<div id="stage">
-  <svg id="arrows"></svg>
-  <div id="wall"></div>
-</div>
+<div id="stage"><svg id="arrows"></svg><div id="wall"></div></div>
 
-<!-- new terminal modal -->
-<div class="overlay" id="ov-new">
-  <div class="modal">
-    <h3>＋ Nouveau terminal géré</h3>
-    <label>Nom</label><input id="nw-name" placeholder="ex: esther, patents, recherche">
-    <div class="row">
-      <div><label>Modèle / mode</label>
-        <select id="nw-mode">
-          <option value="opus">Opus 4.8 (défaut)</option>
-          <option value="sonnet">Sonnet 5</option>
-          <option value="fable">Fable 5</option>
-          <option value="opus-dngrok">Opus + dnGrok (bridge)</option>
-          <option value="fable-dngrok">Fable + dnGrok (bridge)</option>
-          <option value="grok">Grok 4.5</option>
-          <option value="grok-dngrok">Grok + dnGrok</option>
-        </select></div>
-      <div><label>Dossier de travail</label><input id="nw-cwd" placeholder="~ (défaut)"></div>
-    </div>
-    <div class="hint">Lancé en tmux (container caché, zéro vol de focus). Caméra live + injectable.
-      Attache-toi dans un vrai terminal via <span class="mono">tmux attach -t nova-&lt;nom&gt;</span>.</div>
-    <div class="actions"><button onclick="closeOv()">Annuler</button>
-      <button class="primary" id="nw-go">Lancer</button></div>
+<!-- new terminal -->
+<div class="overlay" id="ov-new"><div class="modal">
+  <h3>＋ Nouveau terminal géré</h3>
+  <label>Nom / titre</label><input id="nw-name" placeholder="ex: esther, recherche, patents">
+  <div class="row">
+    <div><label>Modèle / mode</label>
+      <select id="nw-mode">
+        <option value="opus">Opus 4.8</option><option value="sonnet">Sonnet 5</option><option value="fable">Fable 5</option>
+        <option value="opus-dngrok">Opus + dnGrok</option><option value="fable-dngrok">Fable + dnGrok</option>
+        <option value="grok">Grok 4.5</option><option value="grok-dngrok">Grok + dnGrok</option>
+      </select></div>
+    <div><label>Dossier</label><input id="nw-cwd" placeholder="~ (défaut)"></div>
   </div>
-</div>
+  <div class="hint">Lancé en tmux caché (zéro vol de focus), skip-permissions. Caméra live + <b>écrivable</b> + changement de modèle réel.</div>
+  <div class="actions"><button onclick="closeOv()">Annuler</button><button class="primary" id="nw-go">Lancer</button></div>
+</div></div>
 
-<!-- zoom modal -->
-<div class="overlay" id="ov-zoom">
-  <div class="modal" style="width:min(720px,94vw)">
-    <h3 id="z-title">caméra</h3>
-    <div id="z-body" class="mono" style="font-size:12px;max-height:52vh;overflow:auto"></div>
-    <div style="margin-top:14px"><label style="font-size:12px;color:var(--dim)">Injecter dans cette session (si gérée)</label>
-      <div class="row" style="margin-top:6px"><input id="z-inject" placeholder="message à injecter…" style="flex:3">
-        <button class="primary" id="z-send" style="flex:1">Injecter</button></div></div>
-    <div class="actions"><button onclick="closeOv()">Fermer</button></div>
-  </div>
-</div>
+<!-- expand / zoom terminal -->
+<div class="overlay" id="ov-zoom"><div class="modal">
+  <h3 id="z-title">terminal</h3>
+  <div id="zterm" class="mono">…</div>
+  <div id="z-controls"></div>
+  <div class="actions"><button onclick="closeOv()">Fermer</button></div>
+</div></div>
+
+<!-- help -->
+<div class="overlay" id="ov-help"><div class="modal">
+  <h3>❓ Comment marche NOVA WALL</h3>
+  <div class="help-b"><b>🎥 Caméras vs terminaux gérés.</b> Les cases <span class="tag cam" style="display:inline">caméra</span> sont tes sessions existantes (Terminal.app) — <b>lecture seule</b> (on ne peut pas taper dedans sans voler ton focus). Les cases <span class="tag mgd" style="display:inline">géré</span> sont lancées par le mur (tmux caché) — <b>tu écris dedans, tu changes le modèle, tu boucles</b>. Pour contrôler un projet : « ＋ gérer » sur sa caméra, ou ＋ Terminal.</div>
+  <div class="help-b"><b>✍️ Écrire dans un terminal.</b> Sur une case gérée, tape en bas dans « écrire… » puis Entrée. Ou <b>clic droit (2 doigts sur le trackpad)</b> sur la case → elle s'agrandit et tu écris un vrai message dedans.</div>
+  <div class="help-b"><b>🔗 Liaisons (flèches n8n).</b> Clique <b>🔗 Liaisons</b>, puis la case <b>source</b>, puis la case <b>cible</b>, puis choisis :
+    <br>· <span class="k-inject">→ Injecter</span> : pousse le contexte de A dans B (1 sens).
+    <br>· <span class="k-bridge">⇄ Bridge</span> : relais bidirectionnel A↔B.
+    <br>· <span class="k-learn">🎓 Apprendre</span> : A et B s'échangent leurs leçons/techniques.
+    <br>Ensuite <b>clique sur la flèche</b> pour exécuter le transfert (ou la supprimer).</div>
+  <div class="help-b"><b>⧉ Fusion.</b> Clique <b>⧉ Fusion</b>, sélectionne <b>2 sessions</b> : le mur crée un <b>nouveau terminal enfant</b> (Opus+dnGrok) et lui injecte les <b>2 contextes</b> — il hérite des technos des deux. Prouvé : ton terminal de fusion a lu et synthétisé les 2 contextes tout seul.</div>
+  <div class="help-b"><b>🔁 Loop · 🔄 Modèle.</b> 🔁 sur une case gérée = ré-injecte une instruction à intervalle (ex. « continue » toutes les 2 min). Le sélecteur de modèle (cases gérées) <b>relance vraiment</b> le terminal dans le modèle choisi.</div>
+  <div class="actions"><button class="primary" onclick="closeOv()">Compris</button></div>
+</div></div>
 
 <div class="picker" id="picker">
-  <button data-t="inject"><b>→ Injecter</b><span>pousser le contexte A vers B (1 sens)</span></button>
-  <button data-t="bridge"><b>⇄ Bridge</b><span>relais bidirectionnel A↔B</span></button>
-  <button data-t="learn"><b>🎓 Apprendre</b><span>échanger les leçons/techniques A↔B</span></button>
+  <button data-t="inject"><b class="k-inject">→ Injecter</b><span>pousser le contexte A vers B (1 sens)</span></button>
+  <button data-t="bridge"><b class="k-bridge">⇄ Bridge</b><span>relais bidirectionnel A↔B</span></button>
+  <button data-t="learn"><b class="k-learn">🎓 Apprendre</b><span>échanger les leçons/techniques A↔B</span></button>
 </div>
-
 <div class="toast" id="toast"></div>
 
 <script>
-const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
-let S={sessions:[],modes:{},links:[],cols:3,linkMode:false,fuseMode:false,
-       sel:[],linkFrom:null,filter:"",pending:null};
+const $=s=>document.querySelector(s);
+const K=new URLSearchParams(location.search).get("k")||"";
+const qk=u=>K?(u+(u.includes("?")?"&":"?")+"k="+encodeURIComponent(K)):u;
+let S={sessions:[],modes:{},links:[],cols:3,linkMode:false,fuseMode:false,sel:[],linkFrom:null,filter:"",pending:null,zoomId:null,zoomTimer:null};
 
-function toast(m){const t=$("#toast");t.textContent=m;t.classList.add("show");
-  clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove("show"),2600);}
-async function api(u,opt){const r=await fetch(u,opt);return r.json();}
+function toast(m){const t=$("#toast");t.textContent=m;t.classList.add("show");clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove("show"),2800);}
+async function api(u,opt){const r=await fetch(qk(u),opt);return r.json();}
+function esc(s){return (s??"").toString().replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));}
+
+/* ---- ANSI -> HTML (terminal fidèle, couleurs) ---- */
+function xterm(n){
+  const basic=["#1a1a1a","#f43f5e","#34d399","#f5b301","#3b82f6","#a78bfa","#22d3ee","#c9d6ee","#48566f","#fb7185","#6ee7b7","#fde047","#60a5fa","#c4b5fd","#67e8f9","#fff"];
+  if(n<16)return basic[n];
+  if(n<232){n-=16;const r=Math.floor(n/36),g=Math.floor((n%36)/6),b=n%6,c=v=>v?v*40+55:0;return `rgb(${c(r)},${c(g)},${c(b)})`;}
+  const v=(n-232)*10+8;return `rgb(${v},${v},${v})`;
+}
+function ansiToHtml(s){
+  if(!s)return "";
+  const RE=/\x1b\[([0-9;]*)m/g;let out="",last=0,m,st={},active="";
+  const styleStr=()=>{let x="";if(st.fg)x+="color:"+st.fg+";";if(st.bg)x+="background:"+st.bg+";";if(st.b)x+="font-weight:600;";if(st.dim)x+="opacity:.62;";return x;};
+  const emit=t=>{if(!t)return;out+=active?`<span style="${active}">${esc(t)}</span>`:esc(t);};
+  while((m=RE.exec(s))){
+    emit(s.slice(last,m.index));last=RE.lastIndex;
+    const cs=(m[1]||"0").split(";").map(x=>x===""?0:+x);
+    for(let j=0;j<cs.length;j++){const c=cs[j];
+      if(c===0)st={};else if(c===1)st.b=1;else if(c===2)st.dim=1;else if(c===22){st.b=0;st.dim=0;}
+      else if(c>=30&&c<=37)st.fg=xterm(c-30);else if(c>=90&&c<=97)st.fg=xterm(c-90+8);
+      else if(c>=40&&c<=47)st.bg=xterm(c-40);else if(c===39)delete st.fg;else if(c===49)delete st.bg;
+      else if(c===38||c===48){const d=c===38?"fg":"bg";if(cs[j+1]===5){st[d]=xterm(cs[j+2]||0);j+=2;}else if(cs[j+1]===2){st[d]=`rgb(${cs[j+2]||0},${cs[j+3]||0},${cs[j+4]||0})`;j+=4;}}
+    }
+    active=styleStr();
+  }
+  emit(s.slice(last));
+  return out;
+}
 
 async function load(){
   try{
-    const d=await api("/api/sessions"); S.sessions=d.sessions; S.modes=d.modes;
-    const lk=await api("/api/links"); S.links=lk.edges||[];
-    render();
+    const d=await api("/api/sessions");S.sessions=d.sessions;S.modes=d.modes;
+    const lk=await api("/api/links");S.links=lk.edges||[];render();
+    if(S.zoomId)refreshZoom();
   }catch(e){console.error(e);}
 }
-
 function modelClass(m){for(const k of ["Opus","Sonnet","Fable","Grok","GLM","Haiku"])if((m||"").includes(k))return"b-"+k;return"";}
 function fmtAge(s){if(s<60)return"à l'instant";if(s<3600)return Math.round(s/60)+"m";if(s<86400)return Math.round(s/3600)+"h";return"—";}
-function visible(){const f=S.filter.toLowerCase();return S.sessions.filter(s=>!f||
-  (s.project+" "+(s.clients||[]).join(" ")+" "+s.cwd+" "+s.goal+" "+s.model).toLowerCase().includes(f));}
+function visible(){const f=S.filter.toLowerCase();return S.sessions.filter(s=>!f||(s.title+" "+s.project+" "+(s.clients||[]).join(" ")+" "+s.cwd+" "+s.model).toLowerCase().includes(f));}
+const modeOpts=(sel)=>Object.entries(S.modes).map(([k,v])=>`<option value="${k}" ${sel===k?"selected":""}>${v}</option>`).join("");
 
 function render(){
   document.documentElement.style.setProperty("--cols",S.cols);
@@ -223,199 +245,196 @@ function render(){
   $("#n-tot").textContent=S.sessions.length;
   $("#n-mgd").textContent=S.sessions.filter(s=>s.kind==="managed").length;
   wall.innerHTML="";
-  if(!list.length){wall.innerHTML='<div class="empty">Aucune session. Clique ＋ Terminal pour en lancer une.</div>';drawArrows();return;}
+  if(!list.length){wall.innerHTML='<div class="empty">Aucune session. ＋ Terminal pour en lancer une.</div>';drawArrows();return;}
   for(const s of list){
+    const managed=s.kind==="managed";
     const t=document.createElement("div");
-    t.className="tile"+(s.live?"":" idle")+(s.dead?" dead":"")+(s.kind==="managed"?" managed":"")
-      +(S.sel.includes(s.id)?" sel":"")+(S.linkFrom===s.id?" linksrc":"");
+    t.className="tile"+(s.live?"":" idle")+(s.dead?" dead":"")+(managed?" managed":"")+(S.sel.includes(s.id)?" sel":"")+(S.linkFrom===s.id?" linksrc":"");
     t.dataset.id=s.id;
     const led=s.age_s<40?"led hot":(s.live?"led live":"led");
-    const clients=(s.clients||[]).map(c=>`<span class="badge b-client">${c}</span>`).join("");
-    let cam;
-    if(s.kind==="managed"&&s.capture){
-      cam=`<pre class="cam">${esc(s.capture).slice(-1400)||"(terminal vide)"}</pre>`;
+    const clients=(s.clients||[]).slice(0,2).map(c=>`<span class="tag cli">${esc(c)}</span>`).join("");
+    let body;
+    if(managed){
+      body=`<pre class="cam">${s.capture?ansiToHtml(s.capture).slice(-5000):"(terminal…)"}</pre>
+        <div class="writerow"><input placeholder="écrire dans le terminal… (Entrée)" data-write="${esc(s.id)}">
+          <button class="icon" data-act="send" title="envoyer">➤</button></div>`;
     }else{
-      const wins=(s.wins||[]).map(w=>`<span class="chip">✓ ${esc(w).slice(0,60)}</span>`).join("");
-      const blk=(s.blockers||[]).map(w=>`<span class="chip blk">⚠ ${esc(w).slice(0,60)}</span>`).join("");
-      cam=`<div class="goal">${esc(s.goal)||"<span style='color:var(--dimmer)'>—</span>"}</div>
-           <div class="feed">${wins}${blk}</div>`;
+      const wins=(s.wins||[]).map(w=>`<span class="chip">✓ ${esc(w).slice(0,58)}</span>`).join("");
+      const blk=(s.blockers||[]).map(w=>`<span class="chip blk">⚠ ${esc(w).slice(0,58)}</span>`).join("");
+      body=`<div class="goal">${esc(s.goal)||"—"}</div><div>${wins}${blk}</div>
+        <div class="camnote">🎥 caméra (lecture seule) · clic droit / 👁 pour agrandir</div>`;
     }
-    const opts=Object.entries(S.modes).map(([k,v])=>`<option value="${k}" ${s.mode===k?"selected":""}>${v}</option>`).join("");
-    t.innerHTML=`
-      <div class="thead">
-        <span class="${led}"></span>
-        <span class="proj">${esc(s.project)}</span>
-        <span class="tid mono">${esc(s.id)}</span>
-        ${clients}
-        <span class="spacer" style="flex:1"></span>
-        <span class="badge model ${modelClass(s.model)}">${esc(s.model)}</span>
-      </div>
-      <div class="tbody">${cam}<div class="scan"></div></div>
-      <div class="tfoot">
-        <select class="modesel" title="mode (relance en ce mode)">${opts}</select>
-        <button class="icon" data-act="zoom" title="agrandir la caméra">👁</button>
-        ${s.kind==="managed"?`<button class="icon" data-act="attach" title="commande d'attache">⚡</button>
-          <button class="icon" data-act="kill" title="fermer">✕</button>`:""}
-        <span class="age mono">${fmtAge(s.age_s)}</span>
-      </div>`;
-    // interactions
-    t.querySelector(".thead").onclick=()=>tileClick(s);
-    t.querySelector(".tbody").onclick=()=>tileClick(s);
-    t.querySelector('[data-act="zoom"]').onclick=e=>{e.stopPropagation();zoom(s);};
-    const at=t.querySelector('[data-act="attach"]'); if(at)at.onclick=e=>{e.stopPropagation();
-      navigator.clipboard?.writeText("tmux attach -t "+s.id);toast("Copié: tmux attach -t "+s.id);};
-    const kb=t.querySelector('[data-act="kill"]'); if(kb)kb.onclick=async e=>{e.stopPropagation();
-      if(confirm("Fermer "+s.id+" ?")){await api("/api/kill",{method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({target:s.id})});load();}};
-    t.querySelector(".modesel").onclick=e=>e.stopPropagation();
-    t.querySelector(".modesel").onchange=e=>changeMode(s,e.target.value);
+    let foot;
+    const acts=`<button class="icon actg" data-act="feat" title="🟢 ajouter une feature (sous-session)">🟢</button><button class="icon actr" data-act="trbl" title="🔴 troubleshoot (sous-session)">🔴</button><button class="icon acty" data-act="vrfy" title="🟡 vérif Fable 5 + injection contexte">🟡</button><button class="icon" data-act="bridge" title="📁 dossier bridge (logs)">📁</button>`;
+    if(managed){
+      foot=`<select class="modesel" title="changer de modèle (relance)">${modeOpts(s.mode)}</select>
+        <button class="icon ${s.loop?"on":""}" data-act="loop" title="loop">🔁</button>
+        <button class="icon" data-act="zoom" title="agrandir + écrire">⤢</button>
+        <button class="icon" data-act="kill" title="fermer">✕</button>
+        ${acts}<span class="age mono">${s.loop?("🔁"+s.loop_info.count):fmtAge(s.age_s)}</span>`;
+    }else{
+      foot=`<span class="badge model ${modelClass(s.model)}">${esc(s.model)}</span>
+        <button class="icon" data-act="manage" title="ouvrir un terminal géré dans ce projet">＋ gérer</button>
+        <button class="icon" data-act="zoom" title="agrandir">👁</button>
+        ${acts}<span class="age mono">${fmtAge(s.age_s)}</span>`;
+    }
+    t.innerHTML=`<div class="thead"><span class="${led}"></span>
+        <span class="ttl">${esc(s.title)}</span>
+        ${managed?'<span class="tag mgd">géré</span>':'<span class="tag cam">'+esc(s.model)+'</span>'}
+        ${clients}<span class="tid mono">${esc(s.id).slice(0,12)}</span></div>
+      <div class="tbody">${body}</div><div class="tfoot">${foot}</div>`;
+    // header/body click = select(link/fuse) or zoom
+    const hit=e=>{if(e.target.closest("input,select,button,.writerow"))return;tileClick(s);};
+    t.querySelector(".thead").onclick=hit;
+    t.querySelector(".tbody").onclick=e=>{if(e.target.closest("input,button,.writerow"))return;tileClick(s);};
+    t.oncontextmenu=e=>{e.preventDefault();zoom(s);};   // clic droit / 2 doigts => agrandir + écrire
+    const b=(a,f)=>{const el=t.querySelector(`[data-act="${a}"]`);if(el)el.onclick=ev=>{ev.stopPropagation();f();};};
+    b("zoom",()=>zoom(s));
+    b("kill",async()=>{if(confirm("Fermer "+s.id+" ?")){await api("/api/kill",POST({target:s.id}));load();}});
+    b("loop",()=>toggleLoop(s));
+    b("manage",()=>openNew(s.project.replace(/[^a-zA-Z0-9_-]/g,"")||"proj",s.cwd));
+    b("send",()=>{const i=t.querySelector("[data-write]");doInject(s.id,i);});
+    b("feat",()=>subsession(s,"feature"));
+    b("trbl",()=>subsession(s,"troubleshoot"));
+    b("vrfy",()=>subsession(s,"verify"));
+    b("bridge",()=>bridgeFolder(s));
+    const wi=t.querySelector("[data-write]");
+    if(wi){wi.onclick=e=>e.stopPropagation();wi.onkeydown=e=>{if(e.key==="Enter")doInject(s.id,wi);};}
+    const ms=t.querySelector(".modesel");
+    if(ms){ms.onclick=e=>e.stopPropagation();ms.onchange=e=>changeMode(s,e.target.value);}
     wall.appendChild(t);
   }
   drawArrows();
 }
-function esc(s){return (s??"").toString().replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));}
+const POST=o=>({method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(o)});
 
+async function doInject(id,input){
+  const txt=(input.value||"").trim();if(!txt)return;
+  const r=await api("/api/inject",POST({target:id,text:txt}));
+  if(r.ok){toast("Injecté ✓");input.value="";setTimeout(load,600);}
+  else toast(r.reason||"non injectable");
+}
 function tileClick(s){
   if(S.linkMode){
-    if(!S.linkFrom){S.linkFrom=s.id;toast("Source: "+s.id+" — clique la cible");render();}
-    else if(S.linkFrom!==s.id){openPicker(S.linkFrom,s.id);}
+    if(!S.linkFrom){S.linkFrom=s.id;toast("Source: "+s.title+" — clique la cible");render();}
+    else if(S.linkFrom!==s.id)openPicker(S.linkFrom,s.id);
     return;
   }
   if(S.fuseMode){
     if(S.sel.includes(s.id))S.sel=S.sel.filter(x=>x!==s.id);else S.sel.push(s.id);
-    S.sel=S.sel.slice(-2);
-    if(S.sel.length===2)doFuse();
-    render();return;
+    S.sel=S.sel.slice(-2);if(S.sel.length===2)doFuse();render();return;
   }
   zoom(s);
 }
-
-/* ---- link picker ---- */
-function openPicker(from,to){
-  S.pending={from,to};const p=$("#picker");
-  p.style.left=Math.min(event.clientX,innerWidth-240)+"px";
-  p.style.top=Math.min(event.clientY,innerHeight-140)+"px";p.classList.add("show");
+async function changeMode(s,mode){
+  if(s.kind!=="managed"){toast("Caméra externe : modèle non modifiable. « ＋ gérer » pour un terminal contrôlable.");render();return;}
+  toast("Relance "+s.id+" en "+S.modes[mode]+"…");
+  await api("/api/setmode",POST({target:s.id,mode}));setTimeout(load,900);
 }
-$("#picker").querySelectorAll("button").forEach(b=>b.onclick=async()=>{
-  const {from,to}=S.pending;const type=b.dataset.t;$("#picker").classList.remove("show");
-  const r=await api("/api/link",{method:"POST",headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({from,to,type})});
-  S.links.push(r.edge);S.linkFrom=null;render();
-  toast("Liaison "+type+" créée — clique la flèche pour l'exécuter");
-});
-document.addEventListener("click",e=>{if(!e.target.closest("#picker")&&!e.target.closest(".tile"))$("#picker").classList.remove("show");});
+async function toggleLoop(s){
+  if(s.loop){await api("/api/loop/stop",POST({target:s.id}));toast("Loop arrêté");load();return;}
+  const txt=prompt("Message à ré-injecter en boucle :","continue");if(!txt)return;
+  const iv=prompt("Intervalle en secondes (min 20) :","120");if(!iv)return;
+  const r=await api("/api/loop/start",POST({target:s.id,text:txt,interval:+iv}));
+  toast(r.ok?("🔁 loop actif ("+r.interval+"s)"):(r.reason||"échec"));load();
+}
+async function subsession(s,kind){
+  const nm={feature:"🟢 feature",troubleshoot:"🔴 troubleshoot",verify:"🟡 Fable 5"}[kind];
+  toast("Sous-session "+nm+" pour « "+s.title+" »…");
+  const r=await api("/api/subsession",POST({parent:s.id,kind}));
+  toast(r.ok?("Sous-session "+r.tmux+" lancée · bridge "+(r.bridge||"").split('/').slice(-1)[0]):(r.reason||"échec"));
+  setTimeout(load,900);
+}
+async function bridgeFolder(s){
+  const r=await api("/api/bridge",POST({parent:s.id}));
+  if(r.ok){navigator.clipboard&&navigator.clipboard.writeText(r.bridge);toast("📁 bridge créé (chemin copié): "+r.bridge);}
+  else toast(r.reason||"échec");
+}
 
-/* ---- arrows ---- */
+/* ---- link picker + arrows ---- */
+function openPicker(from,to){S.pending={from,to};const p=$("#picker");
+  p.style.left=Math.min(event.clientX,innerWidth-244)+"px";p.style.top=Math.min(event.clientY,innerHeight-150)+"px";p.classList.add("show");}
+$("#picker").querySelectorAll("button").forEach(x=>x.onclick=async()=>{
+  const {from,to}=S.pending,type=x.dataset.t;$("#picker").classList.remove("show");
+  const r=await api("/api/link",POST({from,to,type}));S.links.push(r.edge);S.linkFrom=null;render();
+  toast("Liaison "+type+" créée — clique la flèche pour l'exécuter");});
+document.addEventListener("click",e=>{if(!e.target.closest("#picker")&&!e.target.closest(".tile"))$("#picker").classList.remove("show");});
 function tileRect(id){const el=$(`.tile[data-id="${CSS.escape(id)}"]`);if(!el)return null;
-  const r=el.getBoundingClientRect(),st=$("#stage").getBoundingClientRect();
-  return {x:r.left-st.left+$("#stage").scrollLeft,y:r.top-st.top+$("#stage").scrollTop,w:r.width,h:r.height};}
+  const r=el.getBoundingClientRect(),st=$("#stage");return {x:r.left-st.getBoundingClientRect().left+st.scrollLeft,y:r.top-st.getBoundingClientRect().top+st.scrollTop,w:r.width,h:r.height};}
 function drawArrows(){
-  const svg=$("#arrows");svg.innerHTML=`<defs>
-    <marker id="ah" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
-      <path d="M0,0 L8,3 L0,6 Z" fill="#22d3ee"/></marker></defs>`;
+  const svg=$("#arrows");svg.innerHTML=`<defs><marker id="ah" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#22d3ee"/></marker></defs>`;
   const st=$("#stage");svg.setAttribute("width",st.scrollWidth);svg.setAttribute("height",st.scrollHeight);
   const COL={inject:"#22d3ee",bridge:"#f5b301",learn:"#a78bfa"};
-  for(const e of S.links){
-    const a=tileRect(e.from),b=tileRect(e.to);if(!a||!b)continue;
-    const x1=a.x+a.w/2,y1=a.y+a.h/2,x2=b.x+b.w/2,y2=b.y+b.h/2;
-    const mx=(x1+x2)/2,my=(y1+y2)/2-40;
-    const col=COL[e.type]||"#22d3ee";const two=e.type!=="inject";
+  for(const e of S.links){const a=tileRect(e.from),b=tileRect(e.to);if(!a||!b)continue;
+    const x1=a.x+a.w/2,y1=a.y+a.h/2,x2=b.x+b.w/2,y2=b.y+b.h/2,mx=(x1+x2)/2,my=(y1+y2)/2-40,col=COL[e.type]||"#22d3ee";
     const p=document.createElementNS("http://www.w3.org/2000/svg","path");
-    p.setAttribute("d",`M${x1},${y1} Q${mx},${my} ${x2},${y2}`);
-    p.setAttribute("fill","none");p.setAttribute("stroke",col);
-    p.setAttribute("stroke-width","2.5");p.setAttribute("marker-end","url(#ah)");
+    p.setAttribute("d",`M${x1},${y1} Q${mx},${my} ${x2},${y2}`);p.setAttribute("fill","none");
+    p.setAttribute("stroke",col);p.setAttribute("stroke-width","2.5");p.setAttribute("marker-end","url(#ah)");
     p.setAttribute("opacity",".85");p.style.filter=`drop-shadow(0 0 4px ${col})`;
-    if(two)p.setAttribute("stroke-dasharray","2 6");
-    p.onclick=ev=>{ev.stopPropagation();runOrDel(e);};
-    svg.appendChild(p);
+    if(e.type!=="inject")p.setAttribute("stroke-dasharray","2 6");
+    p.onclick=ev=>{ev.stopPropagation();runOrDel(e);};svg.appendChild(p);
     const lbl=document.createElementNS("http://www.w3.org/2000/svg","text");
-    lbl.setAttribute("x",mx);lbl.setAttribute("y",my+4);lbl.setAttribute("fill",col);
-    lbl.setAttribute("font-size","11");lbl.setAttribute("text-anchor","middle");
-    lbl.textContent=({inject:"→",bridge:"⇄",learn:"🎓⇄"})[e.type]||"→";
-    svg.appendChild(lbl);
-  }
+    lbl.setAttribute("x",mx);lbl.setAttribute("y",my+4);lbl.setAttribute("fill",col);lbl.setAttribute("font-size","12");lbl.setAttribute("text-anchor","middle");
+    lbl.textContent=({inject:"→",bridge:"⇄",learn:"🎓⇄"})[e.type]||"→";svg.appendChild(lbl);}
 }
 async function runOrDel(e){
-  if(confirm(`Liaison ${e.type} ${e.from}→${e.to}\n\nOK = exécuter (transférer le contexte maintenant)\nAnnuler = supprimer la liaison`)){
-    const r=await api("/api/link/run",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(e)});
-    toast(r.ok?("Transfert "+e.type+" exécuté"):"Échec transfert");
-  }else{
-    await api("/api/unlink",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:e.id})});
-    S.links=S.links.filter(x=>x.id!==e.id);render();
+  if(confirm(`Liaison ${e.type} ${e.from}→${e.to}\n\nOK = exécuter (transférer le contexte)\nAnnuler = supprimer`)){
+    const r=await api("/api/link/run",POST(e));
+    toast(r.managed?("Transfert "+e.type+" exécuté ✓"):"Transfert écrit (cible non gérée = fichier fallback)");
+  }else{await api("/api/unlink",POST({id:e.id}));S.links=S.links.filter(x=>x.id!==e.id);render();}
+}
+
+/* ---- zoom / expand + write ---- */
+async function zoom(s){
+  S.zoomId=s.id;$("#z-title").textContent=`${s.title} · ${s.id}`;$("#zterm").innerHTML="chargement…";$("#z-controls").innerHTML="";
+  $("#ov-zoom").classList.add("show");await refreshZoom(true);
+  clearInterval(S.zoomTimer);S.zoomTimer=setInterval(refreshZoom,2000);
+}
+async function refreshZoom(first){
+  if(!S.zoomId)return;const d=await api("/api/tile?id="+encodeURIComponent(S.zoomId));
+  const term=$("#zterm");const atBottom=term.scrollHeight-term.scrollTop-term.clientHeight<40;
+  if(d.capture!==undefined)term.innerHTML=ansiToHtml(d.capture)||"(vide)";
+  else if(d.tail)term.innerHTML=d.tail.map(r=>`<div style="margin:3px 0"><b style="color:${r.role==='assistant'?'#22d3ee':'#f5b301'}">${r.role}</b> ${esc(r.text)}</div>`).join("")||"(pas d'activité)";
+  if(first||atBottom)term.scrollTop=term.scrollHeight;
+  if(first){
+    if(d.tmux){
+      $("#z-controls").innerHTML=`<label style="font-size:12px;color:var(--dim)">Écrire dans ce terminal</label>
+        <div class="row" style="margin-top:6px"><input id="z-in" placeholder="ton message… (Entrée)" style="flex:3"><button class="primary" id="z-send" style="flex:1">Injecter ➤</button></div>`;
+      const zi=$("#z-in");zi.focus();
+      const go=async()=>{const t=(zi.value||"").trim();if(!t)return;const r=await api("/api/inject",POST({target:d.id,text:t}));if(r.ok){zi.value="";toast("Injecté ✓");setTimeout(refreshZoom,500);}else toast(r.reason||"échec");};
+      $("#z-send").onclick=go;zi.onkeydown=e=>{if(e.key==="Enter")go();};
+    }else{
+      $("#z-controls").innerHTML=`<div class="camnote" style="margin-top:10px">🎥 Caméra externe = lecture seule.</div>
+        <button class="primary" style="margin-top:8px" onclick="closeOv();openNew('${esc(s_cwd_name(d))}','${esc(d.cwd)}')">＋ Ouvrir un terminal géré dans ce projet</button>`;
+    }
   }
 }
-
-/* ---- zoom ---- */
-async function zoom(s){
-  $("#z-title").textContent=`caméra · ${s.id} · ${s.project}`;
-  $("#z-body").innerHTML="chargement…";
-  $("#ov-zoom").classList.add("show");
-  const d=await api("/api/tile?id="+encodeURIComponent(s.id));
-  let h="";
-  if(d.capture!==undefined){h=`<pre class="cam" style="max-height:none">${esc(d.capture)||"(vide)"}</pre>`;}
-  else if(d.tail){h=d.tail.map(r=>`<div style="margin:4px 0"><b style="color:${r.role==='assistant'?'#22d3ee':'#f5b301'}">${r.role}</b> ${esc(r.text)}</div>`).join("")||"(pas d'activité récente)";}
-  else h="(pas de flux)";
-  $("#z-body").innerHTML=h;
-  $("#z-send").onclick=async()=>{
-    const txt=$("#z-inject").value.trim();if(!txt)return;
-    const r=await api("/api/inject",{method:"POST",headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({target:s.id,text:txt})});
-    toast(r.ok?"Injecté ✓":(r.reason||"cible non injectable"));if(r.ok)$("#z-inject").value="";
-  };
-}
-
-/* ---- mode change (relaunch managed / hint external) ---- */
-async function changeMode(s,mode){
-  if(s.kind!=="managed"){toast("Session externe : le mode se choisit à sa création. Crée un terminal géré pour ce contrôle.");render();return;}
-  toast("Change de mode = relance "+s.id+" en "+S.modes[mode]);
-  await api("/api/kill",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({target:s.id})});
-  await api("/api/spawn",{method:"POST",headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({name:s.id.replace(/^nova-/,""),mode,cwd:s.cwd})});
-  load();
-}
+function s_cwd_name(d){return (d.project||"proj").replace(/[^a-zA-Z0-9_-]/g,"");}
 
 /* ---- fusion ---- */
 async function doFuse(){
-  const [a,b]=S.sel;
-  const name="fusion-"+a.replace(/^nova-/,"").slice(0,4)+"-"+b.replace(/^nova-/,"").slice(0,4);
-  toast("Fusion "+a+" + "+b+" → nouveau terminal "+name);
-  const sp=await api("/api/spawn",{method:"POST",headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({name,mode:"opus-dngrok",cwd:"~"})});
-  if(sp.tmux){
-    // injecte les deux contextes dans le nouveau
-    for(const src of [a,b]){
-      await api("/api/link/run",{method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({from:src,to:sp.tmux,type:"inject"})});
-    }
-    toast("Fusion créée : "+sp.tmux);
-  }
+  const [a,b]=S.sel,name="fusion-"+a.replace(/^nova-/,"").slice(0,4)+"-"+b.replace(/^nova-/,"").slice(0,4);
+  toast("Fusion "+a+" + "+b+"…");
+  const sp=await api("/api/spawn",POST({name,mode:"opus-dngrok",cwd:"~"}));
+  if(sp.tmux){for(const src of [a,b])await api("/api/link/run",POST({from:src,to:sp.tmux,type:"inject"}));toast("Fusion créée : "+sp.tmux);}
   S.sel=[];S.fuseMode=false;$("#btn-fuse").classList.remove("on");load();
 }
 
 /* ---- toolbar ---- */
-$("#gridseg").querySelectorAll("button").forEach(b=>b.onclick=()=>{
-  $("#gridseg").querySelectorAll("button").forEach(x=>x.classList.remove("on"));
-  b.classList.add("on");S.cols=+b.dataset.c;render();});
-$("#btn-link").onclick=e=>{S.linkMode=!S.linkMode;S.linkFrom=null;S.fuseMode=false;
-  e.target.classList.toggle("on",S.linkMode);$("#btn-fuse").classList.remove("on");
-  toast(S.linkMode?"Mode liaison ON — clique source puis cible":"Mode liaison OFF");render();};
-$("#btn-fuse").onclick=e=>{S.fuseMode=!S.fuseMode;S.sel=[];S.linkMode=false;
-  e.target.classList.toggle("on",S.fuseMode);$("#btn-link").classList.remove("on");
-  toast(S.fuseMode?"Mode fusion — sélectionne 2 sessions":"Mode fusion OFF");render();};
-$("#btn-new").onclick=()=>$("#ov-new").classList.add("show");
-$("#nw-go").onclick=async()=>{
-  const name=$("#nw-name").value.trim()||("t"+Date.now()%1000);
-  const mode=$("#nw-mode").value;let cwd=$("#nw-cwd").value.trim();
-  if(cwd.startsWith("~"))cwd=cwd.replace("~","");
-  const r=await api("/api/spawn",{method:"POST",headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({name,mode,cwd:cwd||null})});
-  closeOv();toast(r.ok?("Lancé "+r.tmux+" — "+r.attach):"Échec spawn");load();};
-$("#btn-pop").onclick=()=>window.open(location.href,"novawall2","width=1200,height=800");
+function openNew(name,cwd){$("#nw-name").value=name||"";$("#nw-cwd").value=cwd||"";$("#nw-mode").value="opus";$("#ov-new").classList.add("show");}
+$("#gridseg").querySelectorAll("button").forEach(b=>b.onclick=()=>{$("#gridseg").querySelectorAll("button").forEach(x=>x.classList.remove("on"));b.classList.add("on");S.cols=+b.dataset.c;render();});
+$("#btn-link").onclick=e=>{S.linkMode=!S.linkMode;S.linkFrom=null;S.fuseMode=false;e.target.classList.toggle("on",S.linkMode);$("#btn-fuse").classList.remove("on");toast(S.linkMode?"Liaison ON — clique source puis cible":"Liaison OFF");render();};
+$("#btn-fuse").onclick=e=>{S.fuseMode=!S.fuseMode;S.sel=[];S.linkMode=false;e.target.classList.toggle("on",S.fuseMode);$("#btn-link").classList.remove("on");toast(S.fuseMode?"Fusion — sélectionne 2 sessions":"Fusion OFF");render();};
+$("#btn-help").onclick=()=>$("#ov-help").classList.add("show");
+$("#btn-list").onclick=e=>{const on=document.body.classList.toggle("listmode");e.target.classList.toggle("on",on);toast(on?"Vue liste (projets + vert/rouge)":"Vue grille");drawArrows();};
+$("#btn-new").onclick=()=>openNew("","");
+$("#nw-go").onclick=async()=>{const name=$("#nw-name").value.trim()||("t"+Date.now()%1000);let cwd=$("#nw-cwd").value.trim();if(cwd.startsWith("~"))cwd=cwd.replace("~","");
+  const r=await api("/api/spawn",POST({name,mode:$("#nw-mode").value,cwd:cwd||null}));closeOv();toast(r.ok?("Lancé "+r.tmux):"échec");load();};
+$("#btn-pop").onclick=()=>window.open(qk(location.pathname),"novawall2","width=1200,height=800");
 $("#filter").oninput=e=>{S.filter=e.target.value;render();};
-window.closeOv=()=>$$(".overlay").forEach(o=>o.classList.remove("show"));
-$$(".overlay").forEach(o=>o.onclick=e=>{if(e.target===o)closeOv();});
+window.closeOv=()=>{document.querySelectorAll(".overlay").forEach(o=>o.classList.remove("show"));S.zoomId=null;clearInterval(S.zoomTimer);};
+document.querySelectorAll(".overlay").forEach(o=>o.onclick=e=>{if(e.target===o)closeOv();});
 $("#stage").onscroll=drawArrows;window.onresize=drawArrows;
-
 load();setInterval(load,4000);
 </script>
 </body>

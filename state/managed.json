@@ -1,1 +1,14 @@
-{}
+{
+  "nova-fusion-dcd6-580d": {
+    "name": "fusion-dcd6-580d",
+    "mode": "opus-dngrok",
+    "cwd": "/Users/codenolimits-dreamai-nanach",
+    "created": 1784542684.6727
+  },
+  "nova-test": {
+    "name": "test",
+    "mode": "opus-dngrok",
+    "cwd": "/Users/codenolimits-dreamai-nanach",
+    "created": 1784542939.819402
+  }
+}

@@ -1,42 +1,44 @@
 #!/usr/bin/env python3
 """
 NOVA WALL — Command Center for live Claude/Grok sessions.
-Un mur de vidéosurveillance : chaque case = une "caméra" sur un terminal.
-- Caméra lecture-seule : TOUTES les sessions vivantes (via synergy.json + tail du .jsonl).
-- Caméra live + injection/bridge/fusion : sessions gérées par NOVA WALL en tmux ("containers").
-Stdlib only. Anti-vol-de-focus (jamais d'osascript/activate ; tmux send-keys = tape DANS le pty).
+Mur de vidéosurveillance : chaque case = une "caméra" sur un terminal.
+- Caméra lecture-seule : TOUTES les sessions vivantes (synergy.json + tail du .jsonl).
+- Caméra live + injection/bridge/fusion/loop/modèle : sessions gérées par NOVA WALL en tmux.
+Stdlib only. Anti-vol-de-focus (tmux send-keys = tape DANS le pty, jamais au niveau OS).
 """
-import os, re, json, time, glob, html, subprocess, threading
+import os, re, json, time, glob, subprocess, threading
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 
-HOME       = os.path.expanduser("~")
-ROOT       = os.path.join(HOME, "nova-wall")
-WEB        = os.path.join(ROOT, "web")
-STATE      = os.path.join(ROOT, "state")
-SYNERGY    = os.path.join(HOME, "omniscient", "synergy.json")
-PROJECTS   = os.path.join(HOME, ".claude", "projects")
-GROK_BIN   = os.path.join(HOME, ".grok", "bin", "grok")
-PORT       = int(os.environ.get("NOVA_WALL_PORT", "8790"))
-LIVE_SEC   = 15 * 60   # une session "vivante" si activité < 15 min
+HOME     = os.path.expanduser("~")
+ROOT     = os.path.join(HOME, "nova-wall")
+WEB      = os.path.join(ROOT, "web")
+STATE    = os.path.join(ROOT, "state")
+SYNERGY  = os.path.join(HOME, "omniscient", "synergy.json")
+PROJECTS = os.path.join(HOME, ".claude", "projects")
+GROK_BIN = os.path.join(HOME, ".grok", "bin", "grok")
+PORT     = int(os.environ.get("NOVA_WALL_PORT", "8790"))
+TOKEN    = os.environ.get("NOVA_WALL_TOKEN", "")   # si défini => l'API exige ?k=<token> (pour le tunnel mobile)
+LIVE_SEC = 15 * 60
 
 os.makedirs(STATE, exist_ok=True)
-MANAGED_F  = os.path.join(STATE, "managed.json")
-LINKS_F    = os.path.join(STATE, "links.json")
+MANAGED_F = os.path.join(STATE, "managed.json")
+LINKS_F   = os.path.join(STATE, "links.json")
 
-# ------- mode -> commande tmux ------------------------------------------------
+_CL = ["claude", "--dangerously-skip-permissions"]   # managed = skip-permissions (comme l'alias de David)
 MODES = {
-    "opus":         {"label": "Opus 4.8",      "bin": ["claude"],                              "env": {}},
-    "sonnet":       {"label": "Sonnet 5",      "bin": ["claude", "--model", "claude-sonnet-5"], "env": {}},
-    "fable":        {"label": "Fable 5",       "bin": ["claude", "--model", "claude-fable-5"],  "env": {}},
-    "opus-dngrok":  {"label": "Opus + dnGrok", "bin": ["claude"],                              "env": {"NOVA_COPILOT": "dngrok"}},
-    "fable-dngrok": {"label": "Fable + dnGrok","bin": ["claude", "--model", "claude-fable-5"],  "env": {"NOVA_COPILOT": "dngrok"}},
-    "grok":         {"label": "Grok 4.5",      "bin": [GROK_BIN],                              "env": {}},
-    "grok-dngrok":  {"label": "Grok + dnGrok", "bin": [GROK_BIN],                              "env": {"NOVA_COPILOT": "dngrok"}},
+    "opus":         {"label": "Opus 4.8",       "bin": _CL,                                  "env": {}},
+    "sonnet":       {"label": "Sonnet 5",       "bin": _CL + ["--model", "claude-sonnet-5"], "env": {}},
+    "fable":        {"label": "Fable 5",        "bin": _CL + ["--model", "claude-fable-5"],  "env": {}},
+    "opus-dngrok":  {"label": "Opus + dnGrok",  "bin": _CL,                                  "env": {"NOVA_COPILOT": "dngrok"}},
+    "fable-dngrok": {"label": "Fable + dnGrok", "bin": _CL + ["--model", "claude-fable-5"],   "env": {"NOVA_COPILOT": "dngrok"}},
+    "grok":         {"label": "Grok 4.5",       "bin": [GROK_BIN],                           "env": {}},
+    "grok-dngrok":  {"label": "Grok + dnGrok",  "bin": [GROK_BIN],                           "env": {"NOVA_COPILOT": "dngrok"}},
 }
 
 _cache = {"t": 0, "data": None}
-_lock = threading.Lock()
+_lock  = threading.Lock()
+LOOPS  = {}   # target -> {"stop": Event, "text": str, "interval": int, "count": int, "thread": Thread}
 
 # ------- helpers --------------------------------------------------------------
 def jload(path, default):
@@ -62,10 +64,8 @@ _MODEL_RE = re.compile(r'"model"\s*:\s*"([^"]+)"')
 _TS_RE    = re.compile(r'"timestamp"\s*:\s*"([^"]+)"')
 
 def live_meta(jsonl):
-    """Dernier modèle + dernier timestamp d'un transcript (rapide, lit la queue)."""
     t = tail_bytes(jsonl, 65536)
-    models = _MODEL_RE.findall(t)
-    ts = _TS_RE.findall(t)
+    models = _MODEL_RE.findall(t); ts = _TS_RE.findall(t)
     model = models[-1] if models else None
     last_ts = ts[-1] if ts else None
     age_s = None
@@ -74,9 +74,7 @@ def live_meta(jsonl):
             import datetime
             dt = datetime.datetime.fromisoformat(last_ts.replace("Z", "+00:00"))
             age_s = (datetime.datetime.now(datetime.timezone.utc) - dt).total_seconds()
-        except Exception:
-            pass
-    # mtime fallback
+        except Exception: pass
     if age_s is None:
         try: age_s = time.time() - os.path.getmtime(jsonl)
         except Exception: age_s = 9e9
@@ -85,13 +83,25 @@ def live_meta(jsonl):
 def pretty_model(m):
     if not m: return "?"
     m = m.lower()
-    if "opus" in m: return "Opus"
-    if "sonnet" in m: return "Sonnet"
-    if "fable" in m: return "Fable"
-    if "haiku" in m: return "Haiku"
-    if "grok" in m: return "Grok"
-    if "glm" in m: return "GLM"
+    for k, v in (("opus","Opus"),("sonnet","Sonnet"),("fable","Fable"),("haiku","Haiku"),("grok","Grok"),("glm","GLM")):
+        if k in m: return v
     return m.split("-")[0][:8]
+
+_TITLE_STRIP = re.compile(r'^\s*=+\s*QUESTION\s*=+\s*', re.I)
+def make_title(goal, clients, project):
+    """Un titre humain court et clair, dérivé du but."""
+    g = (goal or "").strip()
+    g = _TITLE_STRIP.sub("", g)
+    g = re.sub(r'https?://\S+', '', g)
+    g = re.sub(r'\s+', ' ', g).strip(" :—-.")
+    for sep in (". ", " : ", " — ", " - ", ", ", " (", "?", "!"):
+        i = g.find(sep)
+        if 8 <= i <= 60:
+            g = g[:i]; break
+    g = g[:58].strip()
+    if len(g) < 4:
+        g = (clients[0] if clients else project) or "session"
+    return g[0].upper() + g[1:] if g else "session"
 
 def sh(cmd, timeout=10):
     try:
@@ -104,33 +114,146 @@ def tmux_ls():
     r = sh(["tmux", "ls", "-F", "#{session_name}"])
     return [l.strip() for l in r.stdout.splitlines() if l.strip()] if r.returncode == 0 else []
 
-def tmux_capture(target, lines=40):
-    r = sh(["tmux", "capture-pane", "-t", target, "-p", "-S", f"-{lines}"])
+def tmux_capture(target, lines=44, ansi=False):
+    cmd = ["tmux", "capture-pane", "-t", target, "-p", "-S", f"-{lines}"]
+    if ansi: cmd.append("-e")   # -e = garde les séquences d'échappement (couleurs) => terminal fidèle
+    r = sh(cmd)
     return r.stdout if r.returncode == 0 else ""
 
 def tmux_send(target, text):
-    # tape le texte PUIS Enter — dans le pty, jamais au niveau OS
     a = sh(["tmux", "send-keys", "-t", target, "-l", text])
     b = sh(["tmux", "send-keys", "-t", target, "Enter"])
     return a.returncode == 0 and b.returncode == 0
 
-def tmux_spawn(name, mode, cwd):
+def _accept_first_run(tname):
+    # auto-accepte les prompts de 1er lancement (thème, "allow external imports") : « 1 » PUIS Entrée
+    for _ in range(14):
+        time.sleep(2)
+        if tname not in tmux_ls(): return
+        scr = tmux_capture(tname, 30); low = scr.lower()
+        if ("❯ 1." in scr or "yes, allow" in low or "enter to confirm" in low
+                or ("external" in low and "import" in low) or "text style" in low):
+            sh(["tmux", "send-keys", "-t", tname, "1"]); time.sleep(0.3)
+            sh(["tmux", "send-keys", "-t", tname, "Enter"]); time.sleep(1.2)
+
+def tmux_spawn(name, mode, cwd, initial=None):
     spec = MODES.get(mode, MODES["opus"])
     tname = f"nova-{name}"
-    if tname in tmux_ls():
-        return tname, "exists"
+    if tname in tmux_ls(): return tname, "exists"
     envs = " ".join(f'{k}={v}' for k, v in spec["env"].items())
     binpart = " ".join(spec["bin"])
+    if initial and not mode.startswith("grok"):
+        binpart += " '" + initial.replace("'", "'\\''") + "'"   # prompt initial de la sous-session
     inner = f'cd {json.dumps(cwd)} 2>/dev/null; clear; {envs} exec {binpart}'
-    # login shell -> aliases/PATH de David chargés (claude = skip-permissions)
     r = sh(["tmux", "new-session", "-d", "-s", tname, "-x", "220", "-y", "50",
             os.environ.get("SHELL", "/bin/zsh"), "-lc", inner])
-    if r.returncode != 0:
-        return None, r.stderr.strip() or "spawn failed"
-    m = jload(MANAGED_F, {})
-    m[tname] = {"name": name, "mode": mode, "cwd": cwd, "created": time.time()}
+    if r.returncode != 0: return None, r.stderr.strip() or "spawn failed"
+    m = jload(MANAGED_F, {}); m[tname] = {"name": name, "mode": mode, "cwd": cwd, "created": time.time()}
     jsave(MANAGED_F, m)
+    threading.Thread(target=_accept_first_run, args=(tname,), daemon=True).start()
     return tname, "spawned"
+
+def tmux_setmode(target, mode):
+    """Vrai changement de modèle : relance le terminal géré dans le nouveau mode (même dossier)."""
+    m = jload(MANAGED_F, {})
+    info = m.get(target)
+    if not info: return None, "pas un terminal géré"
+    name, cwd = info.get("name"), info.get("cwd", HOME)
+    loop_stop(target)
+    sh(["tmux", "kill-session", "-t", target]); m.pop(target, None); jsave(MANAGED_F, m)
+    return tmux_spawn(name, mode, cwd)
+
+# ------- loops ----------------------------------------------------------------
+def loop_stop(target):
+    lp = LOOPS.pop(target, None)
+    if lp: lp["stop"].set()
+
+def loop_start(target, text, interval):
+    loop_stop(target)
+    interval = max(20, int(interval or 60))
+    stop = threading.Event()
+    def run():
+        while not stop.is_set():
+            if target not in tmux_ls(): break
+            tmux_send(target, text)
+            LOOPS.get(target, {}).__setitem__("count", LOOPS.get(target, {}).get("count", 0) + 1) if target in LOOPS else None
+            for _ in range(interval * 2):
+                if stop.is_set(): break
+                time.sleep(0.5)
+    t = threading.Thread(target=run, daemon=True)
+    LOOPS[target] = {"stop": stop, "text": text, "interval": interval, "count": 0, "thread": t}
+    t.start()
+    return True
+
+# ------- sous-sessions assignées + dossiers bridge ---------------------------
+BRIDGES = os.path.join(ROOT, "bridges")
+
+def _external_logs(sid, n=25):
+    files = glob.glob(os.path.join(PROJECTS, "**", f"{sid}*.jsonl"), recursive=True)
+    if not files: return ""
+    t = tail_bytes(files[0], 160000); rows = []
+    for line in t.splitlines()[-60:]:
+        try: o = json.loads(line)
+        except Exception: continue
+        m = o.get("message", {}); role = m.get("role") if isinstance(m, dict) else None
+        c = m.get("content") if isinstance(m, dict) else None; txt = ""
+        if isinstance(c, str): txt = c
+        elif isinstance(c, list):
+            for blk in c:
+                if isinstance(blk, dict) and blk.get("type") == "text": txt += blk.get("text", "")
+        txt = txt.strip().replace("\n", " ")
+        if txt and role: rows.append(f"{role}: {txt[:300]}")
+    return "\n".join(rows[-n:])
+
+def parent_context(sid):
+    for s in build_sessions():
+        if s["id"] == sid:
+            logs = tmux_capture(s["tmux"], 140) if s.get("tmux") else _external_logs(sid)
+            return {"id": sid, "title": s.get("title", sid), "cwd": s.get("cwd") or HOME,
+                    "goal": s.get("goal", ""), "wins": s.get("wins", []), "blockers": s.get("blockers", []),
+                    "model": s.get("model", ""), "is_grok": "grok" in (str(s.get("model",""))+str(s.get("mode",""))).lower(),
+                    "logs": logs, "managed": bool(s.get("tmux"))}
+    return None
+
+def make_bridge(ctx):
+    d = os.path.join(BRIDGES, ctx["id"]); os.makedirs(d, exist_ok=True)
+    with open(os.path.join(d, "CONTEXT.md"), "w") as f:
+        f.write(f"# CONTEXTE — {ctx['title']} ({ctx['id']})\n\n- Dossier : {ctx['cwd']}\n- Modèle : {ctx['model']}\n\n")
+        f.write(f"## But\n{ctx['goal']}\n\n")
+        if ctx["wins"]: f.write("## ✅ Réussites\n" + "\n".join(f"- {w}" for w in ctx["wins"]) + "\n\n")
+        if ctx["blockers"]: f.write("## ⚠️ Difficultés\n" + "\n".join(f"- {b}" for b in ctx["blockers"]) + "\n\n")
+        f.write(f"## Logs récents\n```\n{ctx['logs'][-4000:]}\n```\n")
+    for fn in ("INBOX.md", "OUTBOX.md"):
+        p = os.path.join(d, fn)
+        if not os.path.exists(p): open(p, "w").write(f"# {fn[:-3]} — pont {ctx['id']}\n")
+    return d
+
+_SUB = {"troubleshoot": ("trbl", "opus-dngrok", "🔴 TROUBLESHOOT"),
+        "feature":      ("feat", "opus-dngrok", "🟢 AJOUT FEATURE"),
+        "verify":       ("vrfy", "fable",       "🟡 VÉRIF FABLE 5")}
+
+def make_subsession(parent, kind):
+    ctx = parent_context(parent)
+    if not ctx: return {"ok": False, "reason": "session introuvable"}
+    tag, mode, label = _SUB.get(kind, _SUB["feature"])
+    if ctx["is_grok"] and kind != "verify": mode = "opus-dngrok"   # aide un Grok via dn-claude
+    bridge = make_bridge(ctx)
+    prompts = {
+      "troubleshoot": f"Tu es une SOUS-SESSION de troubleshoot assignée à « {ctx['title']} » (projet {ctx['cwd']}). "
+        f"Lis {bridge}/CONTEXT.md (but, réussites, difficultés, logs). Diagnostique la difficulté, applique un fix concret et prouve-le. "
+        f"Écris tes trouvailles dans {bridge}/OUTBOX.md. Rien de sacré (Breslev/Saba/hébreu), aucun envoi client.",
+      "feature": f"Tu es une SOUS-SESSION assignée à « {ctx['title']} » (projet {ctx['cwd']}) pour AJOUTER une fonctionnalité utile. "
+        f"Lis {bridge}/CONTEXT.md. Propose 1 amélioration à forte valeur et implémente-la proprement (preuve). "
+        f"Écris ce que tu as fait dans {bridge}/OUTBOX.md. Rien de sacré, aucun envoi client.",
+      "verify": f"Tu es un agent FABLE 5 de VÉRIFICATION assigné à « {ctx['title']} » (projet {ctx['cwd']}). "
+        f"Lis {bridge}/CONTEXT.md. Vérifie ce qui est RÉELLEMENT fait (preuve chiffrée), puis identifie ce qu'on peut AJOUTER "
+        f"ou injecter directement dans le contexte pour l'améliorer. Écris tes propositions dans {bridge}/OUTBOX.md. Honnêteté totale, rien de sacré."}
+    with open(os.path.join(bridge, "PROMPT.md"), "w") as f:
+        f.write(f"# ASSIGNATION {label}\n\n{prompts[kind]}\n")
+    name = f"{tag}-{parent.replace('nova-','')[:8]}"
+    tname, status = tmux_spawn(name, mode, ctx["cwd"], initial=f"Lis et exécute maintenant le fichier {bridge}/PROMPT.md")
+    _cache["t"] = 0
+    return {"ok": tname is not None, "tmux": tname, "bridge": bridge, "kind": kind, "mode": mode, "status": status}
 
 # ------- sessions view --------------------------------------------------------
 def build_sessions():
@@ -141,53 +264,37 @@ def build_sessions():
     managed = jload(MANAGED_F, {})
     live_tmux = set(tmux_ls())
     out = []
-    seen_cwd_id = set()
-
     for s in syn.get("sessions", []):
         jsonl = s.get("file", "")
         meta = live_meta(jsonl) if jsonl else {"model": None, "age_s": 9e9}
         age = meta["age_s"] if meta["age_s"] is not None else s.get("age_min", 9e9) * 60
+        proj = os.path.basename(s.get("cwd", "").rstrip("/")) or "~"
         out.append({
-            "id": s.get("session", "")[:8],
-            "kind": "external",
-            "cwd": s.get("cwd", ""),
-            "project": os.path.basename(s.get("cwd", "").rstrip("/")) or "~",
-            "branch": s.get("branch", ""),
-            "goal": (s.get("goal") or "").strip()[:240],
-            "wins": s.get("wins", [])[:3],
-            "blockers": s.get("blockers", [])[:3],
-            "clients": s.get("clients", []),
-            "urls": s.get("urls", [])[:3],
-            "n_msgs": s.get("n_msgs", 0),
-            "model": pretty_model(meta["model"]),
-            "age_s": round(age),
-            "live": age < LIVE_SEC,
-            "tmux": None,
+            "id": s.get("session", "")[:8], "kind": "external",
+            "cwd": s.get("cwd", ""), "project": proj,
+            "title": make_title(s.get("goal"), s.get("clients", []), proj),
+            "branch": s.get("branch", ""), "goal": (s.get("goal") or "").strip()[:260],
+            "wins": s.get("wins", [])[:3], "blockers": s.get("blockers", [])[:3],
+            "clients": s.get("clients", []), "urls": s.get("urls", [])[:3],
+            "n_msgs": s.get("n_msgs", 0), "model": pretty_model(meta["model"]),
+            "age_s": round(age), "live": age < LIVE_SEC, "tmux": None, "loop": False,
         })
-        seen_cwd_id.add(s.get("session", "")[:8])
-
-    # sessions gérées par NOVA WALL (tmux) — caméra LIVE + injectables
     for tname, info in managed.items():
         alive = tname in live_tmux
-        cap = tmux_capture(tname, 40) if alive else ""
+        cap = tmux_capture(tname, 44, ansi=True) if alive else ""
+        mode = info.get("mode", "opus")
         out.append({
-            "id": tname,
-            "kind": "managed",
-            "cwd": info.get("cwd", ""),
+            "id": tname, "kind": "managed", "cwd": info.get("cwd", ""),
             "project": os.path.basename(info.get("cwd", "").rstrip("/")) or "~",
-            "branch": "",
-            "goal": f'[{MODES.get(info.get("mode","opus"),{}).get("label","?")}] terminal géré',
-            "wins": [], "blockers": [], "clients": [], "urls": [],
-            "n_msgs": 0,
-            "model": MODES.get(info.get("mode", "opus"), {}).get("label", "?"),
-            "mode": info.get("mode", "opus"),
-            "age_s": 0 if alive else 9e9,
-            "live": alive,
-            "tmux": tname,
-            "capture": cap[-4000:],
-            "dead": not alive,
+            "title": info.get("name", tname.replace("nova-", "")),
+            "branch": "", "goal": f'terminal géré · {MODES.get(mode, {}).get("label", "?")}',
+            "wins": [], "blockers": [], "clients": [], "urls": [], "n_msgs": 0,
+            "model": MODES.get(mode, {}).get("label", "?"), "mode": mode,
+            "age_s": 0 if alive else 9e9, "live": alive, "tmux": tname,
+            "capture": cap[-6000:], "dead": not alive,
+            "loop": tname in LOOPS, "loop_info": ({"text": LOOPS[tname]["text"][:60],
+                    "interval": LOOPS[tname]["interval"], "count": LOOPS[tname]["count"]} if tname in LOOPS else None),
         })
-
     out.sort(key=lambda x: (not x["live"], x["age_s"]))
     with _lock:
         _cache["data"] = out; _cache["t"] = time.time()
@@ -196,18 +303,17 @@ def build_sessions():
 # ------- HTTP -----------------------------------------------------------------
 class H(BaseHTTPRequestHandler):
     def log_message(self, *a): pass
-
+    def _auth(self, u):
+        if not TOKEN: return True
+        return parse_qs(u.query).get("k", [""])[0] == TOKEN
     def _send(self, code, body, ctype="application/json"):
         if isinstance(body, (dict, list)): body = json.dumps(body, ensure_ascii=False)
         b = body.encode("utf-8") if isinstance(body, str) else body
         self.send_response(code)
-        self.send_header("Content-Type", ctype)
-        self.send_header("Content-Length", str(len(b)))
-        self.send_header("Cache-Control", "no-store")
-        self.end_headers()
+        self.send_header("Content-Type", ctype); self.send_header("Content-Length", str(len(b)))
+        self.send_header("Cache-Control", "no-store"); self.end_headers()
         try: self.wfile.write(b)
         except Exception: pass
-
     def _body(self):
         try:
             n = int(self.headers.get("Content-Length", 0))
@@ -222,18 +328,18 @@ class H(BaseHTTPRequestHandler):
                     return self._send(200, f.read(), "text/html; charset=utf-8")
             except Exception as e:
                 return self._send(500, f"index missing: {e}", "text/plain")
+        if p.startswith("/api/") and not self._auth(u):
+            return self._send(401, {"error": "token requis"})
         if p == "/api/sessions":
             return self._send(200, {"sessions": build_sessions(),
-                                    "modes": {k: v["label"] for k, v in MODES.items()},
-                                    "ts": time.time()})
+                                    "modes": {k: v["label"] for k, v in MODES.items()}, "ts": time.time()})
         if p == "/api/tile":
             sid = parse_qs(u.query).get("id", [""])[0]
             for s in build_sessions():
                 if s["id"] == sid:
-                    if s.get("tmux"):
-                        s = dict(s); s["capture"] = tmux_capture(s["tmux"], 120)
-                    else:
-                        s = dict(s); s["tail"] = self._tail_summary(sid)
+                    s = dict(s)
+                    if s.get("tmux"): s["capture"] = tmux_capture(s["tmux"], 200, ansi=True)
+                    else: s["tail"] = self._tail_summary(sid)
                     return self._send(200, s)
             return self._send(404, {"error": "not found"})
         if p == "/api/links":
@@ -241,77 +347,86 @@ class H(BaseHTTPRequestHandler):
         return self._send(404, {"error": "no route"})
 
     def _tail_summary(self, sid):
-        # dernières lignes de texte assistant/user d'un transcript externe
         files = glob.glob(os.path.join(PROJECTS, "**", f"{sid}*.jsonl"), recursive=True)
         if not files: return []
-        t = tail_bytes(files[0], 120000)
-        rows = []
-        for line in t.splitlines()[-40:]:
+        t = tail_bytes(files[0], 140000); rows = []
+        for line in t.splitlines()[-50:]:
             try: o = json.loads(line)
             except Exception: continue
-            m = o.get("message", {})
-            role = m.get("role") if isinstance(m, dict) else None
-            c = m.get("content") if isinstance(m, dict) else None
-            txt = ""
+            m = o.get("message", {}); role = m.get("role") if isinstance(m, dict) else None
+            c = m.get("content") if isinstance(m, dict) else None; txt = ""
             if isinstance(c, str): txt = c
             elif isinstance(c, list):
                 for blk in c:
-                    if isinstance(blk, dict) and blk.get("type") == "text":
-                        txt += blk.get("text", "")
-                    elif isinstance(blk, dict) and blk.get("type") == "tool_use":
-                        txt += f'[⚙ {blk.get("name","tool")}] '
+                    if isinstance(blk, dict) and blk.get("type") == "text": txt += blk.get("text", "")
+                    elif isinstance(blk, dict) and blk.get("type") == "tool_use": txt += f'[⚙ {blk.get("name","tool")}] '
             txt = txt.strip().replace("\n", " ")
-            if txt and role: rows.append({"role": role, "text": txt[:220]})
-        return rows[-8:]
+            if txt and role: rows.append({"role": role, "text": txt[:260]})
+        return rows[-10:]
 
     def do_POST(self):
-        u = urlparse(self.path); p = u.path; d = self._body()
+        u = urlparse(self.path); p = u.path
+        if not self._auth(u): return self._send(401, {"error": "token requis"})
+        d = self._body()
         if p == "/api/spawn":
             name = re.sub(r"[^a-zA-Z0-9_-]", "", d.get("name", "") or f"t{int(time.time())%10000}")
-            mode = d.get("mode", "opus")
-            cwd = d.get("cwd") or HOME
+            mode = d.get("mode", "opus"); cwd = d.get("cwd") or HOME
             if not os.path.isdir(cwd): cwd = HOME
-            tname, status = tmux_spawn(name, mode, cwd)
-            _cache["t"] = 0
+            tname, status = tmux_spawn(name, mode, cwd); _cache["t"] = 0
             return self._send(200, {"ok": tname is not None, "tmux": tname, "status": status,
                                     "attach": f"tmux attach -t {tname}" if tname else None})
         if p == "/api/inject":
             target = d.get("target", ""); text = d.get("text", "")
-            if not target.startswith("nova-") and target not in tmux_ls():
-                return self._send(200, {"ok": False, "reason": "cible non gérée (caméra lecture-seule). "
-                                        "Crée un terminal géré pour injecter, ou utilise le bus coord."})
-            ok = tmux_send(target, text)
-            return self._send(200, {"ok": ok})
+            if target not in tmux_ls():
+                return self._send(200, {"ok": False, "managed": False,
+                    "reason": "Caméra en lecture seule (session externe, hors tmux). "
+                              "Ouvre-la en terminal géré pour écrire dedans."})
+            ok = tmux_send(target, text); _cache["t"] = 0
+            return self._send(200, {"ok": ok, "managed": True})
+        if p == "/api/setmode":
+            target = d.get("target", ""); mode = d.get("mode", "opus")
+            tname, status = tmux_setmode(target, mode); _cache["t"] = 0
+            return self._send(200, {"ok": tname is not None, "tmux": tname, "status": status})
+        if p == "/api/loop/start":
+            target = d.get("target", ""); text = d.get("text", ""); interval = d.get("interval", 60)
+            if target not in tmux_ls(): return self._send(200, {"ok": False, "reason": "cible non gérée"})
+            loop_start(target, text, interval); _cache["t"] = 0
+            return self._send(200, {"ok": True, "interval": max(20, int(interval))})
+        if p == "/api/loop/stop":
+            loop_stop(d.get("target", "")); _cache["t"] = 0
+            return self._send(200, {"ok": True})
+        if p == "/api/subsession":
+            return self._send(200, make_subsession(d.get("parent", ""), d.get("kind", "feature")))
+        if p == "/api/bridge":
+            ctx = parent_context(d.get("parent", ""))
+            if not ctx: return self._send(200, {"ok": False, "reason": "introuvable"})
+            return self._send(200, {"ok": True, "bridge": make_bridge(ctx)})
         if p == "/api/kill":
             target = d.get("target", "")
             if target.startswith("nova-"):
-                sh(["tmux", "kill-session", "-t", target])
-                m = jload(MANAGED_F, {}); m.pop(target, None); jsave(MANAGED_F, m)
-                _cache["t"] = 0
+                loop_stop(target); sh(["tmux", "kill-session", "-t", target])
+                m = jload(MANAGED_F, {}); m.pop(target, None); jsave(MANAGED_F, m); _cache["t"] = 0
                 return self._send(200, {"ok": True})
             return self._send(200, {"ok": False, "reason": "refuse: pas un terminal géré"})
         if p == "/api/link":
             links = jload(LINKS_F, {"edges": []})
-            edge = {"from": d.get("from"), "to": d.get("to"),
-                    "type": d.get("type", "inject"), "id": f'e{int(time.time()*1000)%100000}'}
+            edge = {"from": d.get("from"), "to": d.get("to"), "type": d.get("type", "inject"),
+                    "id": f'e{int(time.time()*1000)%100000}'}
             links["edges"].append(edge); jsave(LINKS_F, links)
             return self._send(200, {"ok": True, "edge": edge})
         if p == "/api/unlink":
             links = jload(LINKS_F, {"edges": []})
             links["edges"] = [e for e in links["edges"] if e.get("id") != d.get("id")]
-            jsave(LINKS_F, links)
-            return self._send(200, {"ok": True})
+            jsave(LINKS_F, links); return self._send(200, {"ok": True})
         if p == "/api/link/run":
             return self._send(200, self._run_link(d))
         return self._send(404, {"error": "no route"})
 
     def _ctx_of(self, sid):
-        """Résumé transportable d'une session (pour injection/bridge/learn)."""
         for s in build_sessions():
             if s["id"] == sid:
                 if s.get("tmux"):
-                    cap = tmux_capture(s["tmux"], 60)
-                    return f"[NOVA WALL · contexte de {sid}]\n{cap[-1500:]}"
+                    return f"[NOVA WALL · contexte de {sid}]\n{tmux_capture(s['tmux'], 60)[-1500:]}"
                 bits = [f'BUT: {s.get("goal","")}']
                 if s.get("wins"): bits.append("VICTOIRES: " + " · ".join(s["wins"]))
                 if s.get("blockers"): bits.append("BLOCAGES: " + " · ".join(s["blockers"]))
@@ -324,31 +439,24 @@ class H(BaseHTTPRequestHandler):
         typ = d.get("type", "inject"); a = d.get("from"); b = d.get("to")
         def deliver(src, dst):
             ctx = self._ctx_of(src)
-            if str(dst).startswith("nova-") or dst in tmux_ls():
+            if dst in tmux_ls():
                 msg = (f"Une autre session ({src}) partage son contexte via NOVA WALL. "
                        f"Prends-en connaissance et intègre ce qui est utile :\n\n{ctx}")
                 return tmux_send(dst, msg)
-            # fallback bus coord (cible non gérée)
-            try:
-                sh([os.path.join(HOME, "etz-chaim", "bus", "coord.py") if os.path.exists(
-                    os.path.join(HOME, "etz-chaim", "bus", "coord.py")) else "true"])
-            except Exception: pass
-            outbox = os.path.join(STATE, f"inject_to_{dst}.md")
-            with open(outbox, "w") as f: f.write(ctx)
+            with open(os.path.join(STATE, f"inject_to_{dst}.md"), "w") as f: f.write(ctx)
             return False
         res = {}
-        if typ in ("inject",):
-            res["a_to_b"] = deliver(a, b)
+        if typ == "inject": res["a_to_b"] = deliver(a, b)
         elif typ in ("bridge", "learn"):
-            res["a_to_b"] = deliver(a, b)
-            res["b_to_a"] = deliver(b, a)
+            res["a_to_b"] = deliver(a, b); res["b_to_a"] = deliver(b, a)
         res["type"] = typ
-        return {"ok": True, "result": res}
+        managed_ok = (b in tmux_ls()) or (typ != "inject" and a in tmux_ls())
+        return {"ok": True, "result": res, "managed": managed_ok}
 
 def main():
     os.chdir(ROOT)
     srv = ThreadingHTTPServer(("127.0.0.1", PORT), H)
-    print(f"NOVA WALL → http://127.0.0.1:{PORT}  (Ctrl-C pour arrêter)")
+    print(f"NOVA WALL → http://127.0.0.1:{PORT}  (token={'ON' if TOKEN else 'off'})")
     try: srv.serve_forever()
     except KeyboardInterrupt: print("\nbye")
 
