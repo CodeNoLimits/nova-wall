@@ -313,7 +313,9 @@ function ansiToHtml(s){
 
 async function load(){
   try{
-    const d=await api("/api/sessions");S.sessions=d.sessions;S.modes=d.modes;
+    const r=await fetch(qk("/api/sessions"));
+    if(r.status===401){$("#wall").innerHTML='<div class="empty">🔑 <b>Lien expiré</b> — le token a été renouvelé (sécurité).<br>Ouvre le DERNIER lien envoyé sur Telegram/WhatsApp.</div>';return;}
+    const d=await r.json();S.sessions=d.sessions;S.modes=d.modes;
     const lk=await api("/api/links");S.links=lk.edges||[];render();
     if(S.zoomId)refreshZoom();
   }catch(e){console.error(e);}
