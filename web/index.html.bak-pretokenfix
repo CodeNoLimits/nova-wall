@@ -322,9 +322,7 @@ body.listmode .goal{max-height:40px}
 
 <script>
 const $=s=>document.querySelector(s);
-const _urlK=new URLSearchParams(location.search).get("k")||"";
-if(_urlK) try{localStorage.setItem("nw_k",_urlK);}catch(e){}      // 1er accès avec ?k= → mémorisé
-const K=_urlK||(()=>{try{return localStorage.getItem("nw_k")||"";}catch(e){return "";}})();  // app installée: pas de ?k= → on relit
+const K=new URLSearchParams(location.search).get("k")||"";
 const qk=u=>K?(u+(u.includes("?")?"&":"?")+"k="+encodeURIComponent(K)):u;
 let S={sessions:[],modes:{},links:[],cols:3,linkMode:false,fuseMode:false,sel:[],linkFrom:null,filter:"",pending:null,zoomId:null,zoomTimer:null};
 
@@ -362,9 +360,7 @@ function ansiToHtml(s){
 async function load(){
   try{
     const r=await fetch(qk("/api/sessions"));
-    if(r.status===401){
-      $("#wall").innerHTML='<div class="empty">🔑 <b>Code de connexion requis</b><br><span style="font-size:12px">Colle ton code (ou ouvre le dernier lien reçu sur Telegram/WhatsApp).</span><br><br><input id="kfix" placeholder="code de connexion" style="width:min(320px,80vw);padding:10px"> <button class="primary" onclick="(function(){var v=document.getElementById(\'kfix\').value.trim();if(v){localStorage.setItem(\'nw_k\',v);location.search=\'?k=\'+encodeURIComponent(v);}})()">Valider</button></div>';
-      return;}
+    if(r.status===401){$("#wall").innerHTML='<div class="empty">🔑 <b>Lien expiré</b> — le token a été renouvelé (sécurité).<br>Ouvre le DERNIER lien envoyé sur Telegram/WhatsApp.</div>';return;}
     const d=await r.json();S.sessions=d.sessions;S.modes=d.modes;
     const lk=await api("/api/links");S.links=lk.edges||[];render();
     if(S.zoomId)refreshZoom();
