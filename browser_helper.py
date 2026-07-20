@@ -47,12 +47,18 @@ def cdp_seq(ws_url, cmds, timeout=12):
         try: ws.close()
         except Exception: pass
 
-def shot(key, q=55):
+def shot(key, q=55, scale=0.5):
     t = find(key)
     if not t: return None
     try:
-        r = cdp_seq(t["webSocketDebuggerUrl"], [
-            ("Page.captureScreenshot", {"format": "jpeg", "quality": max(15, min(80, q)), "captureBeyondViewport": False})])
+        ws = t["webSocketDebuggerUrl"]
+        m = cdp_seq(ws, [("Page.getLayoutMetrics", {})])["result"]
+        vp = m.get("cssVisualViewport") or m.get("visualViewport") or {}
+        w, h = vp.get("clientWidth", 1280), vp.get("clientHeight", 800)
+        params = {"format": "jpeg", "quality": max(15, min(80, q)), "captureBeyondViewport": False,
+                  "clip": {"x": vp.get("pageX", 0), "y": vp.get("pageY", 0),
+                           "width": w, "height": h, "scale": max(0.2, min(1.0, scale))}}
+        r = cdp_seq(ws, [("Page.captureScreenshot", params)])
         return base64.b64decode(r["result"]["data"])
     except Exception: return None
 
@@ -117,9 +123,9 @@ class H(BaseHTTPRequestHandler):
             return self._s(200, {"tabs": [{"i": i, "url": t.get("url", ""), "title": (t.get("title", "") or "")[:80]}
                                           for i, t in enumerate(targets())]})
         if u.path == "/shot":
-            try: qual = int(q.get("q", ["55"])[0])
-            except Exception: qual = 55
-            img = shot(q.get("t", [""])[0], qual)
+            try: qual = int(q.get("q", ["55"])[0]); sc = float(q.get("s", ["0.5"])[0])
+            except Exception: qual, sc = 55, 0.5
+            img = shot(q.get("t", [""])[0], qual, sc)
             return self._s(200, img, "image/jpeg") if img else self._s(404, {"error": "no shot"})
         if u.path == "/health":
             return self._s(200, {"ok": True, "tabs": len(targets())})

@@ -109,7 +109,9 @@ body.listmode .goal{max-height:40px}
 .k-inject{color:var(--cyan)}.k-bridge{color:var(--amber)}.k-learn{color:var(--violet)}
 .toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);z-index:80;background:#0d1526;border:1px solid var(--border2);
   padding:11px 18px;border-radius:12px;color:#dff;box-shadow:0 10px 40px rgba(0,0,0,.6);opacity:0;transition:.25s;font-size:13px;max-width:90vw;text-align:center}
+.toast{pointer-events:none}
 .toast.show{opacity:1}
+@media (max-width:760px){.toast{bottom:84px}}
 .empty{grid-column:1/-1;text-align:center;color:var(--dim);padding:60px}
 .picker{position:fixed;z-index:70;background:#0c1424;border:1px solid var(--border2);border-radius:12px;padding:6px;display:none;box-shadow:0 20px 60px rgba(0,0,0,.6)}
 .picker.show{display:block}
@@ -564,7 +566,7 @@ let WS=JSON.parse(localStorage.getItem("nw_ws")||"null")||{pages:[{layout:4,slot
 const wsSave=()=>localStorage.setItem("nw_ws",JSON.stringify(WS));
 const wsPage=()=>WS.pages[WS.cur];
 let wsTimer=null;
-const SHOTQ=matchMedia("(max-width:760px)").matches?"&q=30":"&q=55";
+const SHOTQ=matchMedia("(max-width:760px)").matches?"&q=32&s=0.35":"&q=55&s=0.55";
 function openScreens(){$("#workspace").style.display="block";$("#stage").style.display="none";$("#btn-screens").classList.add("on");renderWS();clearInterval(wsTimer);wsTimer=setInterval(refreshWS,matchMedia("(max-width:760px)").matches?5000:2500);}
 function closeScreens(){$("#workspace").style.display="none";$("#stage").style.display="block";$("#btn-screens").classList.remove("on");clearInterval(wsTimer);}
 window.closeScreens=closeScreens;
