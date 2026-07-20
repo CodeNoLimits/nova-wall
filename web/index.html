@@ -151,7 +151,19 @@ body.listmode .goal{max-height:40px}
 .wslot-h button{margin-left:auto;padding:3px 7px;font-size:11px}
 .wsimg{flex:1;width:100%;object-fit:contain;object-position:top center;background:#000;cursor:crosshair;min-height:0}
 .wslot .writerow{padding:6px} .wslot pre.cam{flex:1;max-height:none}
+/* ---- barre d'onglets mobile (pattern Replit) ---- */
+#tabbar{display:none}
 @media (max-width:760px){
+  #tabbar{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:50;
+    background:rgba(9,13,24,.96);backdrop-filter:blur(14px);border-top:1px solid var(--border2);
+    padding:6px 4px calc(6px + env(safe-area-inset-bottom));justify-content:space-around}
+  #tabbar button{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;
+    background:none;border:0;color:var(--dim);font-size:10px;padding:4px 2px}
+  #tabbar button .ico{font-size:19px;line-height:1}
+  #tabbar button.on{color:var(--cyan)}
+  #stage,#workspace,#graphview,#studio{padding-bottom:64px}
+  header .ctrl button:not(#btn-new),header .seg{display:none}   /* header épuré, nav = barre du bas */
+  header .ctrl{gap:6px}
   .ws-grid.l2,.ws-grid.l4,.ws-grid.l6{grid-template-columns:1fr!important;grid-template-rows:none!important}
   #wall{grid-template-columns:1fr!important;gap:10px;padding:10px}
   .tile{min-height:auto}
@@ -278,6 +290,13 @@ body.listmode .goal{max-height:40px}
   <button data-t="bridge"><b class="k-bridge">⇄ Bridge</b><span>relais bidirectionnel A↔B</span></button>
   <button data-t="learn"><b class="k-learn">🎓 Apprendre</b><span>échanger les leçons/techniques A↔B</span></button>
 </div>
+<nav id="tabbar">
+  <button data-v="mur" class="on"><span class="ico">🎥</span>Mur</button>
+  <button data-v="ecrans"><span class="ico">🖥️</span>Écrans</button>
+  <button data-v="studio"><span class="ico">🗂️</span>Studio</button>
+  <button data-v="graphe"><span class="ico">🕸️</span>Graphe</button>
+  <button data-v="aide"><span class="ico">❓</span>Aide</button>
+</nav>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -545,7 +564,8 @@ let WS=JSON.parse(localStorage.getItem("nw_ws")||"null")||{pages:[{layout:4,slot
 const wsSave=()=>localStorage.setItem("nw_ws",JSON.stringify(WS));
 const wsPage=()=>WS.pages[WS.cur];
 let wsTimer=null;
-function openScreens(){$("#workspace").style.display="block";$("#stage").style.display="none";$("#btn-screens").classList.add("on");renderWS();clearInterval(wsTimer);wsTimer=setInterval(refreshWS,2500);}
+const SHOTQ=matchMedia("(max-width:760px)").matches?"&q=30":"&q=55";
+function openScreens(){$("#workspace").style.display="block";$("#stage").style.display="none";$("#btn-screens").classList.add("on");renderWS();clearInterval(wsTimer);wsTimer=setInterval(refreshWS,matchMedia("(max-width:760px)").matches?5000:2500);}
 function closeScreens(){$("#workspace").style.display="none";$("#stage").style.display="block";$("#btn-screens").classList.remove("on");clearInterval(wsTimer);}
 window.closeScreens=closeScreens;
 $("#btn-screens").onclick=()=>{$("#workspace").style.display==="none"?openScreens():closeScreens();};
@@ -577,7 +597,7 @@ function renderWS(){
         <div class="writerow"><input placeholder="écrire… (Entrée)" onkeydown="if(event.key==='Enter')wsTermSend('${esc(sl.key)}',this)"><button onclick="wsTermSend('${esc(sl.key)}',this.previousElementSibling)">➤</button></div></div>`;
     }else{
       slots+=`<div class="wslot"><div class="wslot-h">🌐 ${esc(sl.label)} <span style="color:var(--dimmer);font-size:10px;font-weight:400">${esc(sl.key)}</span><button onclick="wsAssign(${i},'')">✕</button></div>
-        <img class="wsimg" data-key="${esc(sl.key)}" onclick="wsBrowserClick(event,'${esc(sl.key)}')" src="${qk("/api/browser/shot?t="+encodeURIComponent(sl.key))}" onerror="this.style.opacity=.3;ensureTab('${esc(sl.key)}')">
+        <img class="wsimg" loading="lazy" data-key="${esc(sl.key)}" onclick="wsBrowserClick(event,'${esc(sl.key)}')" src="${qk("/api/browser/shot?t="+encodeURIComponent(sl.key)+SHOTQ)}" onerror="this.style.opacity=.3;ensureTab('${esc(sl.key)}')">
         <div class="writerow"><input placeholder="taper dans la page… (Entrée)" onkeydown="if(event.key==='Enter')wsBrowserType('${esc(sl.key)}',this)"><button onclick="wsBrowserType('${esc(sl.key)}',this.previousElementSibling)">➤</button></div></div>`;
     }
   }
@@ -587,7 +607,7 @@ function renderWS(){
 function refreshWS(){
   if($("#workspace").style.display==="none")return;
   document.querySelectorAll('.wslot[data-term]').forEach(el=>{const s=S.sessions.find(x=>x.id===el.dataset.term);const pre=el.querySelector('pre.cam');if(s&&s.capture&&pre&&document.activeElement!==el.querySelector('input'))pre.innerHTML=ansiToHtml(s.capture);});
-  document.querySelectorAll('.wsimg').forEach(img=>{img.style.opacity=1;img.src=qk("/api/browser/shot?t="+encodeURIComponent(img.dataset.key)+"&_="+Date.now());});
+  document.querySelectorAll('.wsimg').forEach(img=>{if(!img.complete)return;img.style.opacity=1;img.src=qk("/api/browser/shot?t="+encodeURIComponent(img.dataset.key)+SHOTQ+"&_="+Date.now());});
 }
 window.wsTermSend=async function(key,input){const t=(input.value||"").trim();if(!t)return;const r=await api("/api/inject",POST({target:key,text:t}));if(r.ok)input.value="";else toast(r.reason||"échec");};
 window.wsBrowserClick=async function(ev,key){const img=ev.currentTarget,r=img.getBoundingClientRect();await api("/api/browser/click",POST({t:key,x:ev.clientX-r.left,y:ev.clientY-r.top,w:r.width,h:r.height}));setTimeout(()=>{img.src=qk("/api/browser/shot?t="+encodeURIComponent(key)+"&_="+Date.now());},450);};
@@ -726,6 +746,18 @@ function stRefresh(){
   }
 }
 setInterval(stRefresh,3000);
+
+/* barre d'onglets mobile (Replit-style) */
+const MOB=matchMedia("(max-width:760px)").matches;
+function tabSel(v){document.querySelectorAll("#tabbar button").forEach(b=>b.classList.toggle("on",b.dataset.v===v));}
+document.querySelectorAll("#tabbar button").forEach(b=>b.onclick=()=>{
+  const v=b.dataset.v;tabSel(v);
+  closeGraph();closeScreens();closeStudio();closeOv();
+  if(v==="ecrans")$("#btn-screens").click();
+  else if(v==="studio")openStudio();
+  else if(v==="graphe")openGraph();
+  else if(v==="aide"){$("#ov-help").classList.add("show");tabSel("mur");}
+});
 
 load();setInterval(load,4000);
 </script>

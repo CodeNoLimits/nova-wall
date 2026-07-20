@@ -47,12 +47,12 @@ def cdp_seq(ws_url, cmds, timeout=12):
         try: ws.close()
         except Exception: pass
 
-def shot(key):
+def shot(key, q=55):
     t = find(key)
     if not t: return None
     try:
         r = cdp_seq(t["webSocketDebuggerUrl"], [
-            ("Page.captureScreenshot", {"format": "jpeg", "quality": 55, "captureBeyondViewport": False})])
+            ("Page.captureScreenshot", {"format": "jpeg", "quality": max(15, min(80, q)), "captureBeyondViewport": False})])
         return base64.b64decode(r["result"]["data"])
     except Exception: return None
 
@@ -117,7 +117,9 @@ class H(BaseHTTPRequestHandler):
             return self._s(200, {"tabs": [{"i": i, "url": t.get("url", ""), "title": (t.get("title", "") or "")[:80]}
                                           for i, t in enumerate(targets())]})
         if u.path == "/shot":
-            img = shot(q.get("t", [""])[0])
+            try: qual = int(q.get("q", ["55"])[0])
+            except Exception: qual = 55
+            img = shot(q.get("t", [""])[0], qual)
             return self._s(200, img, "image/jpeg") if img else self._s(404, {"error": "no shot"})
         if u.path == "/health":
             return self._s(200, {"ok": True, "tabs": len(targets())})
