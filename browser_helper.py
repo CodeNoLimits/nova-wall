@@ -83,10 +83,24 @@ def shot(key, q=55, scale=0.5):
         m = cdp_seq(ws, [("Page.getLayoutMetrics", {})])["result"]
         vp = m.get("cssVisualViewport") or m.get("visualViewport") or {}
         w, h = vp.get("clientWidth", 1280), vp.get("clientHeight", 800)
+        # Fenêtre minuscule (instance du pool) => capture illisible (400x230 vécu).
+        # On force une taille de rendu correcte UNIQUEMENT dans ce cas : le vrai
+        # navigateur de David (fenêtre normale) n'est jamais retouché.
+        forced = False
+        if w < 900 or h < 600:
+            try:
+                cdp_seq(ws, [("Emulation.setDeviceMetricsOverride",
+                              {"width": 1280, "height": 800, "deviceScaleFactor": 1, "mobile": False})], timeout=4)
+                forced = True; w, h = 1280, 800
+                time.sleep(0.35)
+            except Exception: pass
         params = {"format": "jpeg", "quality": max(15, min(80, q)), "captureBeyondViewport": False,
-                  "clip": {"x": vp.get("pageX", 0), "y": vp.get("pageY", 0),
+                  "clip": {"x": 0 if forced else vp.get("pageX", 0), "y": 0 if forced else vp.get("pageY", 0),
                            "width": w, "height": h, "scale": max(0.2, min(1.0, scale))}}
         r = cdp_seq(ws, [("Page.captureScreenshot", params)])
+        if forced:
+            try: cdp_seq(ws, [("Emulation.clearDeviceMetricsOverride", {})], timeout=3)
+            except Exception: pass
         return base64.b64decode(r["result"]["data"])
     except Exception: return None
 
