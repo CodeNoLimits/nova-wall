@@ -365,24 +365,6 @@ def _accept_first_run(tname):
             sh(["tmux", "send-keys", "-t", tname, "1"]); time.sleep(0.3)
             sh(["tmux", "send-keys", "-t", tname, "Enter"]); time.sleep(1.2)
 
-_KEYMAP = {"\r":"Enter","\n":"Enter","\x7f":"BSpace","\t":"Tab","\x1b":"Escape",
-    "\x1b[A":"Up","\x1b[B":"Down","\x1b[C":"Right","\x1b[D":"Left",
-    "\x03":"C-c","\x04":"C-d","\x1a":"C-z","\x0c":"C-l","\x15":"C-u","\x01":"C-a","\x05":"C-e"}
-def tmux_send_raw(target, data):
-    """Frappe interactive : touches spéciales mappées, texte en littéral."""
-    if data in _KEYMAP:
-        return sh(["tmux", "send-keys", "-t", target, _KEYMAP[data]]).returncode == 0
-    if data:
-        return sh(["tmux", "send-keys", "-t", target, "-l", data]).returncode == 0
-    return False
-
-def tmux_resize(target, cols, rows):
-    sh(["tmux", "resize-window", "-t", target, "-x", str(int(cols)), "-y", str(int(rows))])
-
-def tmux_screen(target):
-    r = sh(["tmux", "capture-pane", "-t", target, "-p", "-e"])
-    return r.stdout if r.returncode == 0 else ""
-
 def tmux_spawn(name, mode, cwd, initial=None):
     spec = MODES.get(mode, MODES["opus"])
     tname = f"nova-{name}"
@@ -810,12 +792,6 @@ class H(BaseHTTPRequestHandler):
                     return self._send(200, f.read(), "text/html; charset=utf-8")
             except Exception as e:
                 return self._send(500, f"index missing: {e}", "text/plain")
-        if p.startswith("/vendor/"):
-            fp = os.path.join(WEB, "vendor", os.path.basename(p))
-            if os.path.exists(fp):
-                ct = "application/javascript" if fp.endswith(".js") else "text/css"
-                with open(fp, "rb") as f: return self._send(200, f.read(), ct)
-            return self._send(404, {"error": "not found"})
         if p.lstrip("/") == "manifest.webmanifest":
             k = parse_qs(u.query).get("k", [""])[0]
             start = "./?k=" + k if (TOKEN and k == TOKEN) else "./"
@@ -897,31 +873,6 @@ class H(BaseHTTPRequestHandler):
                     else: s["tail"] = self._tail_summary(sid)
                     return self._send(200, s)
             return self._send(404, {"error": "not found"})
-        if p == "/api/term/stream":
-            tid = parse_qs(u.query).get("id", [""])[0]
-            if tid not in tmux_ls(): return self._send(404, {"error": "terminal inconnu"})
-            self.send_response(200)
-            self.send_header("Content-Type", "text/event-stream")
-            self.send_header("Cache-Control", "no-store")
-            self.send_header("X-Accel-Buffering", "no")
-            self.end_headers()
-            import hashlib
-            last = ""
-            try:
-                for _ in range(1200):                      # ~10 min max par connexion
-                    scr = tmux_screen(tid)
-                    h = hashlib.md5(scr.encode()).hexdigest()
-                    if h != last:
-                        last = h
-                        payload = json.dumps({"s": scr})
-                        self.wfile.write(f"data: {payload}\n\n".encode())
-                        self.wfile.flush()
-                    else:
-                        self.wfile.write(b": ping\n\n"); self.wfile.flush()
-                    time.sleep(0.5)
-            except Exception:
-                pass
-            return
         if p == "/api/links":
             return self._send(200, jload(LINKS_F, {"edges": []}))
         if p == "/api/fs/list":
@@ -1031,14 +982,6 @@ class H(BaseHTTPRequestHandler):
             tname, status = tmux_spawn(name, mode, cwd); _cache["t"] = 0
             return self._send(200, {"ok": tname is not None, "tmux": tname, "status": status,
                                     "attach": f"tmux attach -t {tname}" if tname else None})
-        if p == "/api/term/key":
-            target = d.get("target", "")
-            if target not in tmux_ls(): return self._send(200, {"ok": False})
-            return self._send(200, {"ok": tmux_send_raw(target, d.get("data", ""))})
-        if p == "/api/term/resize":
-            target = d.get("target", "")
-            if target in tmux_ls(): tmux_resize(target, d.get("cols", 120), d.get("rows", 34))
-            return self._send(200, {"ok": True})
         if p == "/api/inject":
             target = d.get("target", ""); text = d.get("text", "")
             if target not in tmux_ls():
