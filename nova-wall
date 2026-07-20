@@ -1,0 +1,21 @@
+#!/bin/bash
+# NOVA WALL launcher — mur de vidéosurveillance des sessions Claude/Grok.
+PORT="${NOVA_WALL_PORT:-8790}"
+ROOT="$HOME/nova-wall"
+PY=/opt/homebrew/bin/python3; [ -x "$PY" ] || PY=python3
+URL="http://127.0.0.1:$PORT"
+
+# déjà up ?
+if curl -s -o /dev/null -m 2 "$URL/api/sessions"; then
+  echo "NOVA WALL déjà actif → $URL"
+else
+  echo "démarrage NOVA WALL…"
+  nohup "$PY" "$ROOT/server.py" >"$ROOT/state/server.log" 2>&1 &
+  for i in $(seq 1 20); do curl -s -o /dev/null -m 1 "$URL/api/sessions" && break; sleep 0.3; done
+fi
+echo "════════════════════════════════════════"
+echo "  NOVA WALL  →  $URL"
+echo "  (ouvre-le sur ton écran en haut à droite ; ＋ Terminal pour lancer une session)"
+echo "════════════════════════════════════════"
+# -g = arrière-plan, ne vole PAS le focus de David (12ème JAMAIS)
+open -g "$URL" 2>/dev/null || true
