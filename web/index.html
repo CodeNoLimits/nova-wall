@@ -893,7 +893,7 @@ function renderWS(){
         <div class="writerow"><input placeholder="écrire… (Entrée)" onkeydown="if(event.key==='Enter')wsTermSend('${esc(sl.key)}',this)"><button onclick="wsTermSend('${esc(sl.key)}',this.previousElementSibling)">➤</button></div></div>`;
     }else{
       slots+=`<div class="wslot"><div class="wslot-h">🌐 ${esc(sl.label)} <span style="color:var(--dimmer);font-size:10px;font-weight:400">${esc(sl.key)}</span><button onclick="wsAssign(${i},'')">✕</button></div>
-        <img class="wsimg" loading="lazy" data-key="${esc(sl.key)}" onclick="wsBrowserClick(event,'${esc(sl.key)}')" src="${qk("/api/browser/shot?t="+encodeURIComponent(sl.key)+SHOTQ)}" onerror="this.style.opacity=.3;ensureTab('${esc(sl.key)}')">
+        <img class="wsimg" loading="lazy" data-key="${esc(sl.key)}" onclick="wsBrowserClick(event,'${esc(sl.key)}')" src="${qk("/api/browser/shot?t="+encodeURIComponent(sl.key)+SHOTQ)}" onerror="wsDead(this,'${esc(sl.key)}')">
         <div class="writerow"><input placeholder="taper dans la page… (Entrée)" onkeydown="if(event.key==='Enter')wsBrowserType('${esc(sl.key)}',this)"><button onclick="wsBrowserType('${esc(sl.key)}',this.previousElementSibling)">➤</button></div></div>`;
     }
   }
@@ -908,14 +908,27 @@ async function refreshWS(){
     document.querySelectorAll('.wslot[data-term]').forEach(el=>{const s=S.sessions.find(x=>x.id===el.dataset.term);const pre=el.querySelector('pre.cam');
       if(s&&s.capture&&pre&&document.activeElement!==el.querySelector('input'))pre.innerHTML=ansiToHtml(s.capture);});
     // captures Chrome UNE PAR UNE (en parallèle ça saturait le Mac et figeait le téléphone)
-    for(const img of [...document.querySelectorAll('.wsimg')]){
+    for(const img of [...document.querySelectorAll('.wsimg')].filter(i=>i.style.display!=='none')){
       if(document.hidden||$("#workspace").style.display==="none")break;
-      await new Promise(res=>{let done=false;const fin=()=>{if(done)return;done=true;img.onload=img.onerror=null;res();};
-        img.onload=fin;img.onerror=fin;setTimeout(fin,6000);      // filet de sécurité: jamais bloqué
+      await new Promise(res=>{let done=false;const fin=()=>{if(done)return;done=true;img.onload=img.onerror=null;
+          if(img.complete&&img.naturalWidth===0)wsDead(img,img.dataset.key);   // échec → tuile "Ouvrir" claire
+          res();};
+        img.onload=fin;img.onerror=fin;setTimeout(fin,3500);      // filet de sécurité: jamais bloqué
         img.style.opacity=1;img.src=qk("/api/browser/shot?t="+encodeURIComponent(img.dataset.key)+SHOTQ+"&_="+Date.now());});
     }
   }finally{ _wsBusy=false; }
 }
+window.wsDead=function(img,key){
+  img.style.display="none";
+  const holder=img.parentElement;
+  if(holder.querySelector(".wsdead"))return;
+  const d=document.createElement("div");d.className="wsdead";
+  d.style.cssText="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:var(--dim);font-size:13px;background:#05070c;cursor:pointer;min-height:120px";
+  d.innerHTML="🌐 onglet fermé<br><button class=\"primary\" style=\"padding:9px 16px\">Ouvrir "+esc(key.split(".")[0])+"</button>";
+  d.onclick=async()=>{d.innerHTML="⏳ ouverture…";await ensureTab(key);
+    setTimeout(()=>{d.remove();img.style.display="";img.src=qk("/api/browser/shot?t="+encodeURIComponent(key)+SHOTQ+"&_="+Date.now());},3500);};
+  holder.insertBefore(d,holder.querySelector(".writerow"));
+};
 window.wsTermSend=async function(key,input){const t=(input.value||"").trim();if(!t)return;const r=await api("/api/inject",POST({target:key,text:t}));if(r.ok)input.value="";else toast(r.reason||"échec");};
 window.wsBrowserClick=async function(ev,key){const img=ev.currentTarget,r=img.getBoundingClientRect();await api("/api/browser/click",POST({t:key,x:ev.clientX-r.left,y:ev.clientY-r.top,w:r.width,h:r.height}));setTimeout(()=>{img.src=qk("/api/browser/shot?t="+encodeURIComponent(key)+"&_="+Date.now());},450);};
 window.wsBrowserType=async function(key,input){const t=(input.value||"").trim();if(!t)return;await api("/api/browser/type",POST({t:key,text:t}));await api("/api/browser/key",POST({t:key,key:"Enter"}));input.value="";};

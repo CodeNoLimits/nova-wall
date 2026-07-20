@@ -52,6 +52,11 @@ def shot(key, q=55, scale=0.5):
     if not t: return None
     try:
         ws = t["webSocketDebuggerUrl"]
+        # réveil onglet d'arrière-plan (sinon rendu gris / capture qui échoue) — focus-safe, pas de raise fenêtre
+        try:
+            cdp_seq(ws, [("Emulation.setFocusEmulationEnabled", {"enabled": True}),
+                         ("Page.setWebLifecycleState", {"state": "active"})], timeout=4)
+        except Exception: pass
         m = cdp_seq(ws, [("Page.getLayoutMetrics", {})])["result"]
         vp = m.get("cssVisualViewport") or m.get("visualViewport") or {}
         w, h = vp.get("clientWidth", 1280), vp.get("clientHeight", 800)
