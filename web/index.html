@@ -114,6 +114,15 @@ body.listmode .goal{max-height:40px}
 .toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);z-index:80;background:#0d1526;border:1px solid var(--border2);
   padding:11px 18px;border-radius:12px;color:#dff;box-shadow:0 10px 40px rgba(0,0,0,.6);opacity:0;transition:.25s;font-size:13px;max-width:90vw;text-align:center}
 .toast{pointer-events:none}
+#installbar{display:none;position:fixed;left:10px;right:10px;bottom:76px;z-index:70;
+  background:linear-gradient(180deg,#0f1c33,#0b1424);border:1px solid var(--cyan);border-radius:14px;
+  padding:12px 14px;box-shadow:0 18px 50px rgba(0,0,0,.6);align-items:center;gap:12px}
+#installbar.show{display:flex}
+#installbar img{width:40px;height:40px;border-radius:9px;flex:none}
+#installbar .txt{flex:1;font-size:12.5px;line-height:1.45}
+#installbar .txt b{color:#eaf1ff}
+#installbar button{padding:8px 12px;font-size:12.5px}
+@media (min-width:761px){#installbar{bottom:16px;left:auto;right:16px;max-width:420px}}
 .toast.show{opacity:1}
 @media (max-width:760px){.toast{bottom:84px}}
 .empty{grid-column:1/-1;text-align:center;color:var(--dim);padding:60px}
@@ -303,6 +312,12 @@ body.listmode .goal{max-height:40px}
   <button data-v="graphe"><span class="ico">🕸️</span>Graphe</button>
   <button data-v="aide"><span class="ico">❓</span>Aide</button>
 </nav>
+<div id="installbar">
+  <img src="icon-192.png" alt="">
+  <div class="txt" id="install-txt"></div>
+  <button id="install-go" class="primary">Installer</button>
+  <button id="install-no">✕</button>
+</div>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -784,6 +799,29 @@ document.querySelectorAll("#tabbar button").forEach(b=>b.onclick=()=>{
 });
 
 if("serviceWorker" in navigator){navigator.serviceWorker.register(qk("sw.js")).catch(()=>{});}
+/* ---- proposition d'installation (PWA) ---- */
+(function(){
+  const bar=$("#installbar"),txt=$("#install-txt"),go=$("#install-go"),no=$("#install-no");
+  const standalone=matchMedia("(display-mode: standalone)").matches||navigator.standalone===true;
+  const ios=/iphone|ipad|ipod/i.test(navigator.userAgent);
+  const dismissed=localStorage.getItem("nw_install_dismissed");
+  let deferred=null;
+  const show=(html,btn)=>{txt.innerHTML=html;go.style.display=btn?"":"none";bar.classList.add("show");};
+  no.onclick=()=>{bar.classList.remove("show");localStorage.setItem("nw_install_dismissed","1");};
+  if(standalone||dismissed)return;                       // déjà installée ou refusée
+  window.addEventListener("beforeinstallprompt",e=>{     // Chrome / Android / desktop
+    e.preventDefault();deferred=e;
+    show("<b>Installer NOVA WALL</b><br>Accès direct depuis ton bureau, en plein écran.",true);
+  });
+  go.onclick=async()=>{
+    if(deferred){deferred.prompt();const c=await deferred.userChoice;deferred=null;bar.classList.remove("show");
+      if(c&&c.outcome==="accepted")toast("✅ NOVA WALL installée");}
+  };
+  if(ios){                                               // iOS : pas de prompt natif possible (Apple)
+    setTimeout(()=>show("<b>Mets NOVA WALL sur ton écran d'accueil</b><br>Touche <b>Partager</b> ⬆️ en bas de Safari, puis <b>« Sur l'écran d'accueil »</b>.",false),2500);
+  }
+})();
+
 load();setInterval(load,4000);
 </script>
 </body>
