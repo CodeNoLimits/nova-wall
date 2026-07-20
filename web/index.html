@@ -263,7 +263,13 @@ body.listmode .goal{max-height:40px}
     <br>· <span class="k-learn">🎓 Apprendre</span> : A et B s'échangent leurs leçons/techniques.
     <br>Ensuite <b>clique sur la flèche</b> pour exécuter le transfert (ou la supprimer).</div>
   <div class="help-b"><b>⧉ Fusion.</b> Clique <b>⧉ Fusion</b>, sélectionne <b>2 sessions</b> : le mur crée un <b>nouveau terminal enfant</b> (Opus+dnGrok) et lui injecte les <b>2 contextes</b> — il hérite des technos des deux. Prouvé : ton terminal de fusion a lu et synthétisé les 2 contextes tout seul.</div>
-  <div class="help-b"><b>🔁 Loop · 🔄 Modèle.</b> 🔁 sur une case gérée = ré-injecte une instruction à intervalle (ex. « continue » toutes les 2 min). Le sélecteur de modèle (cases gérées) <b>relance vraiment</b> le terminal dans le modèle choisi.</div>
+  <div class="help-b"><b>🔁 Loop · 🔄 Modèle.</b> 🔁 sur une case gérée = ré-injecte une instruction à intervalle (ex. « continue » toutes les 2 min). Le sélecteur de modèle (cases gérées) <b>relance vraiment</b> le terminal dans le modèle choisi — <b>y compris Grok</b> (modes Grok 4.5 et Grok+dnGrok).</div>
+  <div class="help-b"><b>🗂️ STUDIO, pas à pas (ton Cursor maison).</b>
+    ① Clique <b>🗂️ Studio</b>. ② Colonne gauche = TOUS les fichiers du Mac : navigue 📁, tape 📄 un fichier → il s'ouvre (éditeur intégré, 💾 sauve avec backup).
+    ③ Colonne milieu = <b>Terminal</b> : choisis une session dans le menu (ou ＋ pour en créer une). ④ Colonne droite = <b>Agent</b> (Claude/Fable/Grok au choix via ＋).
+    ⑤ Sur un fichier ouvert : <b>→🖥️</b> l'envoie au Terminal, <b>→🤖</b> à l'Agent (ils le lisent et l'intègrent). ⑥ Écris en bas de chaque colonne pour leur parler. Marche pareil depuis le téléphone.</div>
+  <div class="help-b"><b>🔗 LIAISONS, pas à pas.</b> ① Clique <b>🔗 Liaisons</b> (il s'allume). ② Clique la case SOURCE (elle se surligne cyan). ③ Clique la case CIBLE. ④ Choisis → / ⇄ / 🎓 dans le menu qui apparaît. ⑤ Une flèche se dessine : <b>clique la flèche</b> → OK = le transfert s'exécute maintenant (le contexte de la source est écrit DANS le terminal cible) · Annuler = supprime la flèche. ⑥ Re-clique 🔗 pour sortir du mode.</div>
+  <div class="help-b"><b>⧉ FUSION, pas à pas.</b> ① Clique <b>⧉ Fusion</b>. ② Clique 2 cases (elles se surlignent or). ③ Automatique : un NOUVEAU terminal `fusion-xxx` naît (Opus+dnGrok) et reçoit les contextes des 2 parents — il te fait un résumé croisé tout seul. ④ Parle-lui via son champ « écrire… » ou en zoom 👁.</div>
   <div class="actions"><button class="primary" onclick="closeOv()">Compris</button></div>
 </div></div>
 
@@ -459,7 +465,10 @@ function drawArrows(){
     p.setAttribute("stroke",col);p.setAttribute("stroke-width","2.5");p.setAttribute("marker-end","url(#ah)");
     p.setAttribute("opacity",".85");p.style.filter=`drop-shadow(0 0 4px ${col})`;
     if(e.type!=="inject")p.setAttribute("stroke-dasharray","2 6");
-    p.onclick=ev=>{ev.stopPropagation();runOrDel(e);};svg.appendChild(p);
+    svg.appendChild(p);
+    const hit=p.cloneNode();hit.setAttribute("stroke","rgba(0,0,0,0)");hit.setAttribute("stroke-width","18");
+    hit.removeAttribute("marker-end");hit.removeAttribute("stroke-dasharray");hit.style.filter="none";
+    hit.classList.add("edgehit");hit.onclick=ev=>{ev.stopPropagation();runOrDel(e);};svg.appendChild(hit);
     const lbl=document.createElementNS("http://www.w3.org/2000/svg","text");
     lbl.setAttribute("x",mx);lbl.setAttribute("y",my+4);lbl.setAttribute("fill",col);lbl.setAttribute("font-size","12");lbl.setAttribute("text-anchor","middle");
     lbl.textContent=({inject:"→",bridge:"⇄",learn:"🎓⇄"})[e.type]||"→";svg.appendChild(lbl);}
@@ -524,7 +533,14 @@ document.querySelectorAll(".overlay").forEach(o=>o.onclick=e=>{if(e.target===o)c
 $("#stage").onscroll=drawArrows;window.onresize=drawArrows;
 
 /* ================= MODE ÉCRANS (workspace : 4-up + pages + Chrome embarqué) ================= */
-const BR_PRESETS=[{label:"Grok",key:"grok.com"},{label:"Gemini",key:"gemini.google"},{label:"NotebookLM",key:"notebooklm"},{label:"AI Studio",key:"aistudio"},{label:"Claude",key:"claude.ai"},{label:"Gmail",key:"mail.google"}];
+const BR_PRESETS=[{label:"Grok",key:"grok.com",url:"https://grok.com"},{label:"Gemini",key:"gemini.google",url:"https://gemini.google.com"},{label:"NotebookLM",key:"notebooklm",url:"https://notebooklm.google.com"},{label:"AI Studio",key:"aistudio",url:"https://aistudio.google.com"},{label:"Claude",key:"claude.ai",url:"https://claude.ai"},{label:"Gmail",key:"mail.google",url:"https://mail.google.com"}];
+async function ensureTab(key){
+  const pr=BR_PRESETS.find(b=>b.key===key);if(!pr)return;
+  try{const d=await api("/api/browser/tabs");
+    if(!(d.tabs||[]).some(t=>(t.url+" "+t.title).toLowerCase().includes(key)))
+      {await api("/api/browser/open",POST({url:pr.url}));toast("Ouverture "+pr.label+"…");}
+  }catch(e){}
+}
 let WS=JSON.parse(localStorage.getItem("nw_ws")||"null")||{pages:[{layout:4,slots:[]}],cur:0};
 const wsSave=()=>localStorage.setItem("nw_ws",JSON.stringify(WS));
 const wsPage=()=>WS.pages[WS.cur];
@@ -540,7 +556,7 @@ window.wsAssign=function(idx,val){const pg=wsPage();
   if(!val)pg.slots[idx]=null;
   else if(val==="url"){const u=prompt("URL à ouvrir dans une tuile Chrome:","https://");if(!u)return;api("/api/browser/open",POST({url:u}));pg.slots[idx]={kind:"browser",key:u.replace(/^https?:\/\//,"").split("/")[0],label:"URL"};}
   else if(val.startsWith("term:"))pg.slots[idx]={kind:"term",key:val.slice(5)};
-  else if(val.startsWith("br:")){const p=val.split(":");pg.slots[idx]={kind:"browser",key:p[1],label:p[2]};}
+  else if(val.startsWith("br:")){const p=val.split(":");pg.slots[idx]={kind:"browser",key:p[1],label:p[2]};ensureTab(p[1]);}
   wsSave();renderWS();};
 window.wsLayout=function(n){wsPage().layout=n;wsSave();renderWS();};
 window.wsAddPage=function(){WS.pages.push({layout:4,slots:[]});WS.cur=WS.pages.length-1;wsSave();renderWS();};
@@ -561,7 +577,7 @@ function renderWS(){
         <div class="writerow"><input placeholder="écrire… (Entrée)" onkeydown="if(event.key==='Enter')wsTermSend('${esc(sl.key)}',this)"><button onclick="wsTermSend('${esc(sl.key)}',this.previousElementSibling)">➤</button></div></div>`;
     }else{
       slots+=`<div class="wslot"><div class="wslot-h">🌐 ${esc(sl.label)} <span style="color:var(--dimmer);font-size:10px;font-weight:400">${esc(sl.key)}</span><button onclick="wsAssign(${i},'')">✕</button></div>
-        <img class="wsimg" data-key="${esc(sl.key)}" onclick="wsBrowserClick(event,'${esc(sl.key)}')" src="/api/browser/shot?t=${encodeURIComponent(sl.key)}" onerror="this.style.opacity=.3">
+        <img class="wsimg" data-key="${esc(sl.key)}" onclick="wsBrowserClick(event,'${esc(sl.key)}')" src="${qk("/api/browser/shot?t="+encodeURIComponent(sl.key))}" onerror="this.style.opacity=.3;ensureTab('${esc(sl.key)}')">
         <div class="writerow"><input placeholder="taper dans la page… (Entrée)" onkeydown="if(event.key==='Enter')wsBrowserType('${esc(sl.key)}',this)"><button onclick="wsBrowserType('${esc(sl.key)}',this.previousElementSibling)">➤</button></div></div>`;
     }
   }
@@ -571,10 +587,10 @@ function renderWS(){
 function refreshWS(){
   if($("#workspace").style.display==="none")return;
   document.querySelectorAll('.wslot[data-term]').forEach(el=>{const s=S.sessions.find(x=>x.id===el.dataset.term);const pre=el.querySelector('pre.cam');if(s&&s.capture&&pre&&document.activeElement!==el.querySelector('input'))pre.innerHTML=ansiToHtml(s.capture);});
-  document.querySelectorAll('.wsimg').forEach(img=>{img.src="/api/browser/shot?t="+encodeURIComponent(img.dataset.key)+"&_="+Date.now()+qk("").replace("?","&");});
+  document.querySelectorAll('.wsimg').forEach(img=>{img.style.opacity=1;img.src=qk("/api/browser/shot?t="+encodeURIComponent(img.dataset.key)+"&_="+Date.now());});
 }
 window.wsTermSend=async function(key,input){const t=(input.value||"").trim();if(!t)return;const r=await api("/api/inject",POST({target:key,text:t}));if(r.ok)input.value="";else toast(r.reason||"échec");};
-window.wsBrowserClick=async function(ev,key){const img=ev.currentTarget,r=img.getBoundingClientRect();await api("/api/browser/click",POST({t:key,x:ev.clientX-r.left,y:ev.clientY-r.top,w:r.width,h:r.height}));setTimeout(()=>{img.src="/api/browser/shot?t="+encodeURIComponent(key)+"&_="+Date.now();},450);};
+window.wsBrowserClick=async function(ev,key){const img=ev.currentTarget,r=img.getBoundingClientRect();await api("/api/browser/click",POST({t:key,x:ev.clientX-r.left,y:ev.clientY-r.top,w:r.width,h:r.height}));setTimeout(()=>{img.src=qk("/api/browser/shot?t="+encodeURIComponent(key)+"&_="+Date.now());},450);};
 window.wsBrowserType=async function(key,input){const t=(input.value||"").trim();if(!t)return;await api("/api/browser/type",POST({t:key,text:t}));await api("/api/browser/key",POST({t:key,key:"Enter"}));input.value="";};
 
 /* ================= GRAPHE DE CONNAISSANCES ================= */
