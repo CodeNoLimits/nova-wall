@@ -6,10 +6,6 @@
 <meta name="theme-color" content="#06080d">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="NOVA WALL">
-<link rel="manifest" href="manifest.webmanifest">
-<link rel="apple-touch-icon" href="icon-180.png">
-<link rel="icon" type="image/png" href="icon-192.png">
 <title>NOVA WALL — Command Center</title>
 <style>
 :root{
@@ -472,12 +468,10 @@ async function bridgeFolder(s){
 /* ---- link picker + arrows ---- */
 function openPicker(from,to){S.pending={from,to};const p=$("#picker");
   p.style.left=Math.min(event.clientX,innerWidth-244)+"px";p.style.top=Math.min(event.clientY,innerHeight-150)+"px";p.classList.add("show");}
-const PICKER_HTML=$("#picker").innerHTML;
-function bindPicker(){ $("#picker").querySelectorAll("button[data-t]").forEach(x=>x.onclick=async()=>{
+$("#picker").querySelectorAll("button").forEach(x=>x.onclick=async()=>{
   const {from,to}=S.pending,type=x.dataset.t;$("#picker").classList.remove("show");
   const r=await api("/api/link",POST({from,to,type}));S.links.push(r.edge);S.linkFrom=null;render();
-  toast("Liaison "+type+" créée — touche la flèche pour l'exécuter");});}
-bindPicker();
+  toast("Liaison "+type+" créée — clique la flèche pour l'exécuter");});
 document.addEventListener("click",e=>{if(!e.target.closest("#picker")&&!e.target.closest(".tile"))$("#picker").classList.remove("show");});
 function tileRect(id){const el=$(`.tile[data-id="${CSS.escape(id)}"]`);if(!el)return null;
   const r=el.getBoundingClientRect(),st=$("#stage");return {x:r.left-st.getBoundingClientRect().left+st.scrollLeft,y:r.top-st.getBoundingClientRect().top+st.scrollTop,w:r.width,h:r.height};}
@@ -501,26 +495,10 @@ function drawArrows(){
     lbl.textContent=({inject:"→",bridge:"⇄",learn:"🎓⇄"})[e.type]||"→";svg.appendChild(lbl);}
 }
 async function runOrDel(e){
-  // feuille d'action tactile (remplace confirm() : illisible et frustrant sur mobile)
-  const names={inject:"→ Injecter",bridge:"⇄ Bridge",learn:"🎓 Apprendre"};
-  const A=S.sessions.find(x=>x.id===e.from),B=S.sessions.find(x=>x.id===e.to);
-  const p=$("#picker");
-  p.innerHTML=`<div style="padding:8px 10px;font-size:12px;color:var(--dim);border-bottom:1px solid var(--border);margin-bottom:4px">
-      <b style="color:#eaf1ff">${names[e.type]||e.type}</b><br>${esc(A?A.title:e.from)} → ${esc(B?B.title:e.to)}</div>
-    <button id="edge-run"><b style="color:var(--green)">▶︎ Exécuter maintenant</b><span>transférer le contexte</span></button>
-    <button id="edge-del"><b style="color:var(--red)">🗑️ Supprimer la flèche</b><span>garder les sessions</span></button>
-    <button id="edge-cancel"><b>Annuler</b><span></span></button>`;
-  const ev=window.event||{clientX:innerWidth/2,clientY:innerHeight/2};
-  p.style.left=Math.max(8,Math.min((ev.clientX||innerWidth/2)-110,innerWidth-244))+"px";
-  p.style.top=Math.max(8,Math.min((ev.clientY||innerHeight/2)-40,innerHeight-200))+"px";
-  p.classList.add("show");
-  const close=()=>{p.classList.remove("show");p.innerHTML=PICKER_HTML;bindPicker();};
-  $("#edge-run").onclick=async()=>{close();
+  if(confirm(`Liaison ${e.type} ${e.from}→${e.to}\n\nOK = exécuter (transférer le contexte)\nAnnuler = supprimer`)){
     const r=await api("/api/link/run",POST(e));
-    toast(r.managed?("✅ "+(names[e.type]||e.type)+" exécuté"):"⚠️ cible non gérée — écrit en fichier");};
-  $("#edge-del").onclick=async()=>{close();await api("/api/unlink",POST({id:e.id}));
-    S.links=S.links.filter(x=>x.id!==e.id);render();toast("Flèche supprimée");};
-  $("#edge-cancel").onclick=close;
+    toast(r.managed?("Transfert "+e.type+" exécuté ✓"):"Transfert écrit (cible non gérée = fichier fallback)");
+  }else{await api("/api/unlink",POST({id:e.id}));S.links=S.links.filter(x=>x.id!==e.id);render();}
 }
 
 /* ---- zoom / expand + write ---- */
@@ -783,7 +761,6 @@ document.querySelectorAll("#tabbar button").forEach(b=>b.onclick=()=>{
   else if(v==="aide"){$("#ov-help").classList.add("show");tabSel("mur");}
 });
 
-if("serviceWorker" in navigator){navigator.serviceWorker.register(qk("sw.js")).catch(()=>{});}
 load();setInterval(load,4000);
 </script>
 </body>

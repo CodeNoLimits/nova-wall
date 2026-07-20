@@ -399,13 +399,6 @@ class H(BaseHTTPRequestHandler):
                     return self._send(200, f.read(), "text/html; charset=utf-8")
             except Exception as e:
                 return self._send(500, f"index missing: {e}", "text/plain")
-        if p.lstrip("/") in ("manifest.webmanifest", "sw.js", "icon-192.png", "icon-512.png", "icon-180.png"):
-            fp = os.path.join(WEB, p.lstrip("/"))
-            if os.path.exists(fp):
-                ct = ("application/manifest+json" if fp.endswith("webmanifest")
-                      else "application/javascript" if fp.endswith(".js") else "image/png")
-                with open(fp, "rb") as f: return self._send(200, f.read(), ct)
-            return self._send(404, {"error": "not found"})
         if p.startswith("/api/") and not self._auth(u):
             return self._send(401, {"error": "token requis"})
         if p == "/api/sessions":
