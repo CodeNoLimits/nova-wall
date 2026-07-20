@@ -2,7 +2,10 @@
 <html lang="fr">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#06080d">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>NOVA WALL — Command Center</title>
 <style>
 :root{
@@ -14,6 +17,9 @@
 html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);
   font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Inter",system-ui,sans-serif;
   -webkit-font-smoothing:antialiased;overflow:hidden}
+body{display:flex;flex-direction:column}
+header{flex:none}
+#stage,#workspace,#graphview{position:relative;flex:1;min-height:0;inset:auto!important}
 body{background:
   radial-gradient(1200px 600px at 80% -10%, rgba(34,211,238,.06), transparent 60%),
   radial-gradient(900px 500px at 10% 110%, rgba(167,139,250,.05), transparent 60%),
@@ -36,7 +42,7 @@ button.primary{background:linear-gradient(180deg,#12a3bd,#0c7f96);border-color:#
 .seg{display:flex;background:var(--panel2);border:1px solid var(--border2);border-radius:9px;overflow:hidden}
 .seg button{border:0;border-radius:0;background:transparent;padding:7px 9px}
 .seg button.on{background:rgba(34,211,238,.16)}
-#stage{position:absolute;inset:54px 0 0 0;overflow:auto}
+#stage{overflow:auto}
 #wall{display:grid;gap:12px;padding:14px;min-height:100%;grid-template-columns:repeat(var(--cols,3),1fr);align-content:start}
 .tile{position:relative;background:linear-gradient(180deg,var(--panel),var(--panel2));
   border:1px solid var(--border);border-radius:14px;overflow:hidden;display:flex;flex-direction:column;
@@ -112,7 +118,11 @@ body.listmode .goal{max-height:40px}
 #zterm{font-size:12px;line-height:1.4;background:#03060a;border:1px solid #10251a;border-radius:10px;padding:12px;
   max-height:48vh;overflow:auto;white-space:pre-wrap;color:#8affc0}
 /* ---- mode Écrans (workspace) ---- */
-#workspace{position:absolute;inset:54px 0 0 0;display:flex;flex-direction:column;overflow:hidden}
+#workspace{display:flex;flex-direction:column;overflow:hidden}
+#graphview{display:none;overflow:hidden}
+#gcanvas{width:100%;height:100%;display:block;touch-action:none;cursor:grab}
+.glegend{position:absolute;top:10px;left:12px;font-size:11px;color:var(--dim);background:rgba(8,12,22,.8);padding:8px 12px;border-radius:10px;border:1px solid var(--border);line-height:1.7;pointer-events:none}
+.gdot{display:inline-block;width:14px;height:3px;border-radius:2px;margin-right:6px;vertical-align:middle}
 .ws-bar{display:flex;align-items:center;gap:8px;padding:8px 14px;border-bottom:1px solid var(--border);background:rgba(0,0,0,.3);flex-wrap:wrap}
 .ws-bar .wsp{padding:5px 11px} .ws-bar .wsp.on{background:rgba(34,211,238,.16);border-color:var(--cyan);color:#dffaff}
 .ws-grid{flex:1;display:grid;gap:8px;padding:10px;overflow:auto;min-height:0}
@@ -130,8 +140,18 @@ body.listmode .goal{max-height:40px}
   .ws-grid.l2,.ws-grid.l4,.ws-grid.l6{grid-template-columns:1fr!important;grid-template-rows:none!important}
   #wall{grid-template-columns:1fr!important;gap:10px;padding:10px}
   .tile{min-height:auto}
-  header{gap:8px} .stat{display:none}
-  .ctrl input{width:120px} pre.cam{max-height:200px}
+  header{gap:6px;padding:8px 10px} .stat{display:none} .brand small{display:none}
+  .ctrl{gap:6px} .ctrl input{width:104px}
+  #gridseg{display:none}                          /* 1 colonne forcée sur mobile */
+  button,select{padding:9px 12px;font-size:14px}  /* cibles tactiles ≥40px */
+  .icon{padding:9px 11px;font-size:14px}
+  .tfoot{flex-wrap:wrap;row-gap:5px}
+  .writerow input{padding:10px;font-size:15px}    /* ≥16px évite le zoom iOS au focus */
+  pre.cam{max-height:210px;font-size:11px}
+  .modal{padding:14px;border-radius:14px}
+  #zterm{max-height:44vh;font-size:11px}
+  .ws-bar{gap:6px;padding:6px 8px}
+  .glegend{font-size:10px;padding:6px 9px}
 }
 </style>
 </head>
@@ -151,6 +171,7 @@ body.listmode .goal{max-height:40px}
     <button id="btn-link" title="Mode liaison n8n">🔗 Liaisons</button>
     <button id="btn-fuse" title="Fusionner 2 sessions">⧉ Fusion</button>
     <button id="btn-screens" title="Mode Écrans (4-up + pages + Chrome embarqué)">🖥️ Écrans</button>
+    <button id="btn-graph" title="Graphe de connaissances">🕸️</button>
     <button id="btn-help" title="Comment ça marche">❓</button>
     <button id="btn-new" class="primary">＋ Terminal</button>
     <button id="btn-pop" title="2ᵉ écran">⧉⧉</button>
@@ -159,6 +180,16 @@ body.listmode .goal{max-height:40px}
 
 <div id="stage"><svg id="arrows"></svg><div id="wall"></div></div>
 <div id="workspace" style="display:none"></div>
+<div id="graphview">
+  <canvas id="gcanvas"></canvas>
+  <div class="glegend">
+    <b>🕸️ Graphe de connaissances</b><br>
+    <span class="gdot" style="background:#f472b6"></span>client partagé<br>
+    <span class="gdot" style="background:#22d3ee"></span>même dossier<br>
+    <span class="gdot" style="background:#f5b301"></span>liaison manuelle<br>
+    <span style="color:var(--dimmer)">tap = ouvrir · drag = déplacer</span>
+  </div>
+</div>
 
 <!-- new terminal -->
 <div class="overlay" id="ov-new"><div class="modal">
@@ -507,6 +538,71 @@ function refreshWS(){
 window.wsTermSend=async function(key,input){const t=(input.value||"").trim();if(!t)return;const r=await api("/api/inject",POST({target:key,text:t}));if(r.ok)input.value="";else toast(r.reason||"échec");};
 window.wsBrowserClick=async function(ev,key){const img=ev.currentTarget,r=img.getBoundingClientRect();await api("/api/browser/click",POST({t:key,x:ev.clientX-r.left,y:ev.clientY-r.top,w:r.width,h:r.height}));setTimeout(()=>{img.src="/api/browser/shot?t="+encodeURIComponent(key)+"&_="+Date.now();},450);};
 window.wsBrowserType=async function(key,input){const t=(input.value||"").trim();if(!t)return;await api("/api/browser/type",POST({t:key,text:t}));await api("/api/browser/key",POST({t:key,key:"Enter"}));input.value="";};
+
+/* ================= GRAPHE DE CONNAISSANCES ================= */
+const GCOL={client:"#f472b6",folder:"#22d3ee",inject:"#f5b301",bridge:"#f5b301",learn:"#a78bfa"};
+let G={nodes:[],edges:[],on:false,raf:0,drag:null,px:0,py:0};
+$("#btn-graph").onclick=()=>{G.on?closeGraph():openGraph();};
+function closeGraph(){G.on=false;cancelAnimationFrame(G.raf);$("#graphview").style.display="none";$("#stage").style.display="block";$("#btn-graph").classList.remove("on");}
+window.closeGraph=closeGraph;
+async function openGraph(){
+  closeScreens();$("#stage").style.display="none";$("#graphview").style.display="block";
+  $("#btn-graph").classList.add("on");G.on=true;
+  const d=await api("/api/graph");
+  const W=$("#gcanvas").clientWidth,Hh=$("#gcanvas").clientHeight;
+  const old=new Map(G.nodes.map(n=>[n.id,n]));
+  G.nodes=d.nodes.map((n,i)=>{const o=old.get(n.id);const a=i/Math.max(d.nodes.length,1)*6.283;
+    return Object.assign({x:o?o.x:W/2+Math.cos(a)*Math.min(W,Hh)*.33,y:o?o.y:Hh/2+Math.sin(a)*Math.min(W,Hh)*.33,vx:0,vy:0},n);});
+  G.edges=d.edges;tickGraph();
+}
+function tickGraph(){
+  if(!G.on)return;
+  const cv=$("#gcanvas"),dpr=devicePixelRatio||1;
+  const W=cv.clientWidth,Hh=cv.clientHeight;
+  if(cv.width!==W*dpr){cv.width=W*dpr;cv.height=Hh*dpr;}
+  const ctx=cv.getContext("2d");ctx.setTransform(dpr,0,0,dpr,0,0);
+  const N=G.nodes,idx=new Map(N.map(n=>[n.id,n]));
+  // physique
+  for(let i=0;i<N.length;i++)for(let j=i+1;j<N.length;j++){
+    const a=N[i],b=N[j];let dx=b.x-a.x,dy=b.y-a.y;let d2=dx*dx+dy*dy||1;const d=Math.sqrt(d2);
+    const rep=1600/d2;dx/=d;dy/=d;a.vx-=dx*rep;a.vy-=dy*rep;b.vx+=dx*rep;b.vy+=dy*rep;}
+  for(const e of G.edges){const a=idx.get(e.a),b=idx.get(e.b);if(!a||!b)continue;
+    const dx=b.x-a.x,dy=b.y-a.y,d=Math.sqrt(dx*dx+dy*dy)||1;
+    const f=Math.max(-4,Math.min(4,(d-150)*.012));
+    a.vx+=dx/d*f;a.vy+=dy/d*f;b.vx-=dx/d*f;b.vy-=dy/d*f;}
+  for(const n of N){if(G.drag===n)continue;
+    n.vx+=(W/2-n.x)*.004;n.vy+=(Hh/2-n.y)*.004;
+    n.vx=Math.max(-5,Math.min(5,n.vx*.85));n.vy=Math.max(-5,Math.min(5,n.vy*.85));
+    n.x+=n.vx;n.y+=n.vy;
+    n.x=Math.max(26,Math.min(W-26,n.x));n.y=Math.max(26,Math.min(Hh-26,n.y));}
+  // rendu
+  ctx.clearRect(0,0,W,Hh);
+  for(const e of G.edges){const a=idx.get(e.a),b=idx.get(e.b);if(!a||!b)continue;
+    ctx.strokeStyle=GCOL[e.type]||"#48566f";ctx.globalAlpha=.55;ctx.lineWidth=e.type==="client"?2:1.4;
+    ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();ctx.globalAlpha=1;}
+  for(const n of N){
+    const r=n.kind==="managed"?11:8;
+    ctx.beginPath();ctx.arc(n.x,n.y,r,0,6.283);
+    ctx.fillStyle=n.live?(n.kind==="managed"?"#22d3ee":"#34d399"):"#2a3550";ctx.fill();
+    if(n.live){ctx.strokeStyle=ctx.fillStyle;ctx.globalAlpha=.35;ctx.lineWidth=5;ctx.stroke();ctx.globalAlpha=1;}
+    ctx.fillStyle=n.live?"#dbe7fb":"#5a6a8c";ctx.font="11px -apple-system,sans-serif";ctx.textAlign="center";
+    ctx.fillText(n.title.slice(0,20),n.x,n.y+r+13);}
+  G.raf=requestAnimationFrame(tickGraph);
+}
+function gHit(x,y){for(const n of G.nodes){const dx=x-n.x,dy=y-n.y;if(dx*dx+dy*dy<400)return n;}return null;}
+function gPos(ev){const r=$("#gcanvas").getBoundingClientRect();const t=ev.touches?ev.touches[0]:ev;return {x:t.clientX-r.left,y:t.clientY-r.top};}
+const gc=$("#gcanvas");
+const gDown=ev=>{const p=gPos(ev);const n=gHit(p.x,p.y);if(n){G.drag=n;G.px=p.x;G.py=p.y;ev.preventDefault();}};
+const gMove=ev=>{if(!G.drag)return;const p=gPos(ev);G.drag.x=p.x;G.drag.y=p.y;G.drag.vx=G.drag.vy=0;ev.preventDefault();};
+const gUp=ev=>{if(!G.drag)return;const p=ev.changedTouches?{x:ev.changedTouches[0].clientX-gc.getBoundingClientRect().left,y:ev.changedTouches[0].clientY-gc.getBoundingClientRect().top}:gPos(ev);
+  const moved=Math.hypot(p.x-G.px,p.y-G.py);const n=G.drag;G.drag=null;
+  if(moved<8){const s=S.sessions.find(x=>x.id===n.id);if(s){closeGraph();zoom(s);}}};
+gc.addEventListener("mousedown",gDown);gc.addEventListener("mousemove",gMove);gc.addEventListener("mouseup",gUp);
+gc.addEventListener("touchstart",gDown,{passive:false});gc.addEventListener("touchmove",gMove,{passive:false});gc.addEventListener("touchend",gUp);
+setInterval(()=>{if(G.on)api("/api/graph").then(d=>{const old=new Map(G.nodes.map(n=>[n.id,n]));
+  const cv=$("#gcanvas");G.nodes=d.nodes.map((n,i)=>{const o=old.get(n.id);const a=i/Math.max(d.nodes.length,1)*6.283;
+    return Object.assign({x:o?o.x:cv.clientWidth/2+Math.cos(a)*200,y:o?o.y:cv.clientHeight/2+Math.sin(a)*200,vx:0,vy:0},n);});
+  G.edges=d.edges;}).catch(()=>{});},8000);
 
 load();setInterval(load,4000);
 </script>

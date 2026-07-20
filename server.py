@@ -354,6 +354,29 @@ class H(BaseHTTPRequestHandler):
             return self._send(404, {"error": "not found"})
         if p == "/api/links":
             return self._send(200, jload(LINKS_F, {"edges": []}))
+        if p == "/api/graph":
+            ss = build_sessions()
+            nodes = [{"id": s["id"], "title": s["title"], "live": s["live"], "kind": s["kind"],
+                      "model": s["model"], "clients": s.get("clients", []), "project": s["project"]} for s in ss]
+            edges, seen = [], set()
+            def add(a, b, typ, label):
+                k = (min(a, b), max(a, b), typ)
+                if a != b and k not in seen: seen.add(k); edges.append({"a": a, "b": b, "type": typ, "label": label})
+            by_client, by_cwd = {}, {}
+            for s in ss:
+                for c in s.get("clients", []): by_client.setdefault(c, []).append(s["id"])
+                if s.get("cwd") and s["cwd"] != HOME: by_cwd.setdefault(s["cwd"], []).append(s["id"])
+            for c, ids in by_client.items():
+                for i in range(len(ids)):
+                    for j in range(i + 1, len(ids)): add(ids[i], ids[j], "client", c)
+            for d, ids in by_cwd.items():
+                for i in range(len(ids)):
+                    for j in range(i + 1, len(ids)): add(ids[i], ids[j], "folder", os.path.basename(d))
+            for e in jload(LINKS_F, {"edges": []}).get("edges", []):
+                add(e.get("from", ""), e.get("to", ""), e.get("type", "inject"), e.get("type", ""))
+            ids = {n["id"] for n in nodes}
+            edges = [e for e in edges if e["a"] in ids and e["b"] in ids]
+            return self._send(200, {"nodes": nodes, "edges": edges})
         if p == "/api/browser/tabs":
             return self._proxyb("GET", "/tabs")
         if p == "/api/browser/shot":
