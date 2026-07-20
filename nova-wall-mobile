@@ -1,0 +1,33 @@
+#!/bin/bash
+# NOVA WALL mobile — instance tokenisée + tunnel public Cloudflare, pour piloter depuis le téléphone.
+# Envoie le lien sur Telegram/WhatsApp/mail. Le desktop (8790) reste ouvert sans token.
+ROOT="$HOME/nova-wall"; PY=/opt/homebrew/bin/python3; [ -x "$PY" ] || PY=python3
+MPORT="${NOVA_WALL_MOBILE_PORT:-8791}"
+mkdir -p "$ROOT/state"
+TOKEN=$(cat "$ROOT/state/mobile_token.txt" 2>/dev/null)
+[ -z "$TOKEN" ] && { TOKEN=$(openssl rand -hex 10); echo "$TOKEN" > "$ROOT/state/mobile_token.txt"; }
+
+# (re)start l'instance mobile tokenisée
+lsof -ti tcp:$MPORT 2>/dev/null | xargs kill 2>/dev/null
+NOVA_WALL_PORT=$MPORT NOVA_WALL_TOKEN="$TOKEN" nohup "$PY" "$ROOT/server.py" > "$ROOT/state/server_mobile.log" 2>&1 & disown
+
+# (re)start un tunnel PROPRE (--config /dev/null => ignore le tunnel nommé dreamnova-mcp, sinon 404)
+pkill -f "cloudflared --config /dev/null tunnel --url http://127.0.0.1:$MPORT" 2>/dev/null
+nohup cloudflared --config /dev/null tunnel --url "http://127.0.0.1:$MPORT" --no-autoupdate > "$ROOT/state/tunnel.log" 2>&1 & disown
+
+URL=""; for i in $(seq 1 25); do
+  URL=$(grep -oE "https://[a-z0-9-]+\.trycloudflare\.com" "$ROOT/state/tunnel.log" | head -1)
+  [ -n "$URL" ] && curl -s -o /dev/null -m3 "$URL/?k=$TOKEN" && break; sleep 1
+done
+LAN=$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null)
+echo "$URL/?k=$TOKEN" > "$ROOT/state/mobile_link.txt"
+echo "════════════════════════════════════════"
+echo "📱 DISTANT (partout) : $URL/?k=$TOKEN"
+echo "🏠 WIFI maison       : http://$LAN:$MPORT/?k=$TOKEN"
+echo "════════════════════════════════════════"
+# envoi optionnel : nova-wall-mobile send
+if [ "$1" = "send" ] && command -v dn-report >/dev/null; then
+  dn-report -s "NOVA WALL MOBILE" "📱 $URL/?k=$TOKEN
+🏠 http://$LAN:$MPORT/?k=$TOKEN
+(token privé = clé de contrôle)"
+fi
