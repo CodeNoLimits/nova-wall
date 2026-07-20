@@ -417,8 +417,8 @@ function ansiToHtml(s){
 async function load(){
   try{
     const r=await fetch(qk("/api/sessions"));
-    if(r.status===401){        // plus de champ bricolé ici : la page de login gère mot de passe + code par mail
-      location.replace("/");
+    if(r.status===401){
+      $("#wall").innerHTML='<div class="empty">🔑 <b>Code de connexion requis</b><br><span style="font-size:12px">Colle ton code (ou ouvre le dernier lien reçu sur Telegram/WhatsApp).</span><br><br><input id="kfix" placeholder="code de connexion" style="width:min(320px,80vw);padding:10px"> <button class="primary" onclick="(function(){var v=document.getElementById(\'kfix\').value.trim();if(v){localStorage.setItem(\'nw_k\',v);location.search=\'?k=\'+encodeURIComponent(v);}})()">Valider</button></div>';
       return;}
     const d=await r.json();S.sessions=d.sessions;S.modes=d.modes;
     const lk=await api("/api/links");S.links=lk.edges||[];render();

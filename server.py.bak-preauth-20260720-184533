@@ -7,8 +7,6 @@ Mur de vidéosurveillance : chaque case = une "caméra" sur un terminal.
 Stdlib only. Anti-vol-de-focus (tmux send-keys = tape DANS le pty, jamais au niveau OS).
 """
 import os, re, json, time, glob, shutil, subprocess, threading, urllib.request
-import hmac, secrets, smtplib, urllib.parse
-from email.message import EmailMessage
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 # launchd donne un PATH minimal → tmux (homebrew) et dn-grok deviendraient introuvables
 os.environ["PATH"] = "/opt/homebrew/bin:/usr/local/bin:" + os.environ.get("PATH", "/usr/bin:/bin")
@@ -31,109 +29,6 @@ LINKS_F   = os.path.join(STATE, "links.json")
 UPLOADS   = os.path.join(STATE, "uploads")          # médias/fichiers envoyés depuis le téléphone
 MAX_UPLOAD = 512 * 1024 * 1024                      # 512 Mo (une vidéo iPhone tient largement)
 DISK_MARGIN = 3 * 1024 * 1024 * 1024                # jamais remplir le disque : 3 Go de marge (règle AGENTS.md §8)
-
-# ------- SESSION PERSISTANTE (cookie) -----------------------------------------
-# Avant : l'auth n'existait QUE via ?k=<token> dans l'URL. Toute navigation qui perdait
-# le parametre (fleche retour, relance de la PWA installee -- dont le jar de stockage
-# iOS est SEPARE de Safari) = 401. Le cookie voyage sur chaque requete sans JS : il
-# survit au retour arriere, au relancement de l'app et a la purge de localStorage (ITP).
-SESS_F        = os.path.join(STATE, "sessions.json")
-COOKIE        = "nw_sid"
-COOKIE_MAXAGE = 10 * 365 * 24 * 3600     # 10 ans, RE-GLISSE a chaque visite => de fait infini
-OTP_TTL       = 15 * 60                  # code mail valable 15 min
-OTP_MAX_TRY   = 5                        # au-dela, le code est brule
-OTP_COOLDOWN  = 60                       # 1 envoi / minute max (anti-abus)
-# Le code part vers CETTE liste seulement : celui qui clique ne choisit PAS l'adresse
-# (sinon c'est un relais ouvert / une prise de compte). Un inconnu qui clique se contente
-# d'envoyer un mail a David -- il ne peut pas le recevoir.
-OTP_TO = [a.strip() for a in os.environ.get(
-    "NOVA_WALL_OTP_TO", "dreamnovaultimate@gmail.com,admin@holyrentals.com").split(",") if a.strip()]
-
-_sess_lock = threading.Lock()
-_otp = {"code": "", "exp": 0, "tries": 0, "last": 0}
-
-def sess_load() -> dict:
-    try:
-        with open(SESS_F) as f: return json.load(f)
-    except Exception: return {}
-
-def sess_save(d: dict):
-    tmp = SESS_F + ".tmp"
-    with open(tmp, "w") as f: json.dump(d, f, indent=2)
-    os.replace(tmp, SESS_F)
-
-def sess_new(how: str) -> str:
-    """Cree une session qui n'expire JAMAIS (demande de David : rester connecte ad vitam)."""
-    sid = secrets.token_urlsafe(32)
-    with _sess_lock:
-        d = sess_load()
-        d[sid] = {"created": time.time(), "last": time.time(), "how": how}
-        if len(d) > 200:                 # garde-fou : on ne garde que les 200 plus recentes
-            for k in sorted(d, key=lambda k: d[k].get("last", 0))[:len(d) - 200]: d.pop(k, None)
-        sess_save(d)
-    return sid
-
-def sess_valid(sid: str) -> bool:
-    if not sid: return False
-    with _sess_lock:
-        d = sess_load()
-        if sid not in d: return False
-        d[sid]["last"] = time.time(); sess_save(d)     # pas d'expiration : on note juste la visite
-    return True
-
-def sess_drop(sid: str):
-    with _sess_lock:
-        d = sess_load()
-        if d.pop(sid, None) is not None: sess_save(d)
-
-def dn_secret(name: str) -> str:
-    try:
-        r = subprocess.run([os.path.join(HOME, "etz-chaim", "bin", "dn-secret"), name],
-                           capture_output=True, text=True, timeout=10)
-        return r.stdout.strip()
-    except Exception:
-        return ""
-
-def send_login_code(code: str) -> dict:
-    """Mail (demande de David) + Telegram en second canal : si le mail traine, il a le code
-    tout de suite -- et il ne peut pas se retrouver enferme dehors."""
-    out = {"mail": False, "telegram": False, "detail": ""}
-    body = (f"Ton code de connexion NOVA WALL : {code}\n\n"
-            f"Valable {OTP_TTL // 60} minutes.\n"
-            "Si tu n'as rien demande, ignore ce mail : sans le code, personne n'entre.")
-    # Chaine d'expediteurs : Gmail impose un quota d'envoi QUOTIDIEN (550 5.4.5). Le jour ou
-    # dreamnovaultimate l'a epuise (prospection, rapports), le code doit quand meme partir.
-    # Ajouter un compte de secours = poser 2 secrets et les nommer ici via l'env, ex :
-    #   NOVA_WALL_SMTP_ACCOUNTS="GMAIL_USER:GMAIL_APP_PASSWORD,PERSO_USER:PERSO_APP_PASSWORD"
-    chain = [p.split(":", 1) for p in os.environ.get(
-        "NOVA_WALL_SMTP_ACCOUNTS", "GMAIL_USER:GMAIL_APP_PASSWORD").split(",") if ":" in p]
-    errs = []
-    for uname, pname in chain:
-        user, pw = dn_secret(uname.strip()), dn_secret(pname.strip())
-        if not (user and pw):
-            errs.append(f"{uname}: secret absent"); continue
-        try:
-            m = EmailMessage()
-            m["Subject"] = f"NOVA WALL — code {code}"
-            m["From"], m["To"] = user, ", ".join(OTP_TO)
-            m.set_content(body)
-            with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=25) as s:
-                s.login(user, pw); s.send_message(m)
-            out["mail"] = True
-            break
-        except Exception as e:
-            errs.append(f"{user or uname}: {str(e)[:90]}")
-    if not out["mail"]:
-        out["detail"] = "mail: " + " | ".join(errs)
-    tok, cid = dn_secret("TELEGRAM_BOT_TOKEN"), dn_secret("TELEGRAM_CHAT_ID")
-    if tok and cid:
-        try:
-            data = urllib.parse.urlencode({"chat_id": cid, "text": f"🔑 NOVA WALL — code {code}"}).encode()
-            urllib.request.urlopen(f"https://api.telegram.org/bot{tok}/sendMessage", data=data, timeout=15).read()
-            out["telegram"] = True
-        except Exception:
-            pass
-    return out
 
 _CL = ["claude", "--dangerously-skip-permissions"]   # managed = skip-permissions (comme l'alias de David)
 MODES = {
@@ -613,47 +508,15 @@ def build_sessions():
 # ------- HTTP -----------------------------------------------------------------
 class H(BaseHTTPRequestHandler):
     def log_message(self, *a): pass
-    # --- session : le cookie est la voie normale, ?k= reste accepte (liens Telegram) ---
-    def _cookie(self, name):
-        for part in (self.headers.get("Cookie") or "").split(";"):
-            k, _, v = part.strip().partition("=")
-            if k == name: return v
-        return ""
-
-    def _https(self):
-        xf = (self.headers.get("X-Forwarded-Proto") or "").lower()
-        if xf: return xf == "https"
-        return "dreamnovamcp.com" in (self.headers.get("Host") or "")
-
     def _auth(self, u):
-        self._mint = self._mint_how = None
-        if not TOKEN: return True                       # instance locale (:8790) : inchangee
-        sid = self._cookie(COOKIE)
-        if sid and sess_valid(sid):
-            self._mint, self._mint_how = sid, "slide"   # re-glisse => duree de fait infinie
-            return True
-        k = parse_qs(u.query).get("k", [""])[0]
-        if k and hmac.compare_digest(k, TOKEN):
-            self._mint, self._mint_how = sess_new("token"), "new"   # ?k= valide => session ouverte
-            return True
-        return False
-
-    def _set_cookie_hdr(self):
-        sid = getattr(self, "_mint", None)
-        if not sid: return None
-        flags = f"{COOKIE}={sid}; Path=/; Max-Age={COOKIE_MAXAGE}; HttpOnly; SameSite=Lax"
-        return flags + ("; Secure" if self._https() else "")
-
-    def _send(self, code, body, ctype="application/json", extra=None):
+        if not TOKEN: return True
+        return parse_qs(u.query).get("k", [""])[0] == TOKEN
+    def _send(self, code, body, ctype="application/json"):
         if isinstance(body, (dict, list)): body = json.dumps(body, ensure_ascii=False)
         b = body.encode("utf-8") if isinstance(body, str) else body
         self.send_response(code)
         self.send_header("Content-Type", ctype); self.send_header("Content-Length", str(len(b)))
-        self.send_header("Cache-Control", "no-store")
-        ck = self._set_cookie_hdr()
-        if ck: self.send_header("Set-Cookie", ck)
-        for k2, v2 in (extra or {}).items(): self.send_header(k2, v2)
-        self.end_headers()
+        self.send_header("Cache-Control", "no-store"); self.end_headers()
         try: self.wfile.write(b)
         except Exception: pass
     def _body(self):
@@ -661,55 +524,6 @@ class H(BaseHTTPRequestHandler):
             n = int(self.headers.get("Content-Length", 0))
             return json.loads(self.rfile.read(n) or b"{}")
         except Exception: return {}
-
-    def _auth_route(self, p, u):
-        """Login : mot de passe (le code de connexion) OU code a 6 chiffres envoye par mail.
-        Ces routes sont volontairement accessibles sans etre authentifie -- c'est le login."""
-        d = self._body()
-
-        if p == "/api/auth/request-code":
-            now = time.time()
-            if now - _otp["last"] < OTP_COOLDOWN:
-                return self._send(429, {"ok": False,
-                    "error": f"Attends {int(OTP_COOLDOWN - (now - _otp['last']))}s avant un nouveau code."})
-            code = f"{secrets.randbelow(1000000):06d}"
-            _otp.update({"code": code, "exp": now + OTP_TTL, "tries": 0, "last": now})
-            r = send_login_code(code)
-            if not (r["mail"] or r["telegram"]):
-                return self._send(502, {"ok": False, "error": "Envoi impossible : " + (r["detail"] or "canaux muets")})
-            where = " et ".join([c for c, on in (("mail", r["mail"]), ("Telegram", r["telegram"])) if on])
-            if not r["mail"]:                        # canal demande par David : ne jamais masquer sa panne
-                print(f"[auth] mail KO → {r['detail']}", flush=True)
-            return self._send(200, {"ok": True, "sent": where, "ttl_min": OTP_TTL // 60,
-                                    "mail": r["mail"], "detail": r["detail"]})
-
-        if p == "/api/auth/verify":
-            given = (d.get("code") or "").strip().replace(" ", "")
-            # Le mot de passe historique (le code de connexion = TOKEN) reste accepte :
-            # c'est la voie pour "une nouvelle personne" et le filet de secours de David.
-            if TOKEN and given and hmac.compare_digest(given, TOKEN):
-                self._mint = sess_new("password")
-                return self._send(200, {"ok": True, "how": "password"})
-            if not _otp["code"] or time.time() > _otp["exp"]:
-                return self._send(401, {"ok": False, "error": "Code expire — redemande un code."})
-            if _otp["tries"] >= OTP_MAX_TRY:
-                _otp["code"] = ""
-                return self._send(429, {"ok": False, "error": "Trop d'essais — redemande un code."})
-            _otp["tries"] += 1
-            if not hmac.compare_digest(given, _otp["code"]):
-                return self._send(401, {"ok": False,
-                    "error": f"Code incorrect ({OTP_MAX_TRY - _otp['tries']} essai(s) restant(s))."})
-            _otp["code"] = ""                       # a usage unique
-            self._mint = sess_new("otp")
-            return self._send(200, {"ok": True, "how": "otp"})
-
-        if p == "/api/auth/logout":
-            sid = self._cookie(COOKIE)
-            if sid: sess_drop(sid)
-            return self._send(200, {"ok": True},
-                              extra={"Set-Cookie": f"{COOKIE}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax"})
-
-        return self._send(404, {"error": "not found"})
 
     def _proxyb(self, method, path, body=None):
         # proxy vers le helper navigateur (8792) => tuiles Chrome accessibles aussi via le tunnel mobile
@@ -722,17 +536,8 @@ class H(BaseHTTPRequestHandler):
             return self._send(502, {"error": "browser helper down", "detail": str(e)[:100]})
 
     def do_GET(self):
-        self._mint = None
         u = urlparse(self.path); p = u.path
         if p in ("/", "/index.html"):
-            # Non authentifie => page de login (mot de passe OU code par mail), au lieu de
-            # servir l'app qui se prendrait un 401 sur chaque appel API.
-            if not self._auth(u):
-                try:
-                    with open(os.path.join(WEB, "login.html"), "rb") as f:
-                        return self._send(200, f.read(), "text/html; charset=utf-8")
-                except Exception:
-                    return self._send(401, {"error": "token requis"})
             try:
                 with open(os.path.join(WEB, "index.html"), "rb") as f:
                     return self._send(200, f.read(), "text/html; charset=utf-8")
@@ -886,10 +691,7 @@ class H(BaseHTTPRequestHandler):
         return rows[-10:]
 
     def do_POST(self):
-        self._mint = None
         u = urlparse(self.path); p = u.path
-        if p.startswith("/api/auth/"):          # login : accessible AVANT d'etre authentifie
-            return self._auth_route(p, u)
         if not self._auth(u): return self._send(401, {"error": "token requis"})
         if p == "/api/upload":                      # corps binaire brut => AVANT _body() (qui lirait tout en JSON)
             return self._upload(u)

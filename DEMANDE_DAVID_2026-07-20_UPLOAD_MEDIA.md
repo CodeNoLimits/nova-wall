@@ -62,3 +62,35 @@ bouton bleu Injecter**, tu mets tous ces boutons qui permettent ça. »
 2. Injection réellement reçue par un terminal géré (`tmux capture-pane` montre la ligne).
 3. Screenshot du rendu **mobile** (largeur iPhone) montrant les 4 boutons sous la barre de texte.
 4. Test des 4 types (photo / vidéo / audio / fichier quelconque) → 4/4.
+
+---
+
+## ⚠️ CONTRAINTE AJOUTÉE PAR DAVID — 2026-07-20 17:52 (session 96056)
+
+> « Fais attention que quand on clique sur le terminal on ne perde pas la capacité de scroller
+> la fenêtre terminal comme on pouvait avant. »
+
+**NE JAMAIS régresser ça.** Cause racine identifiée et corrigée :
+`refreshZoom` tourne toutes les 2 s et remplace **tout** `#zterm.innerHTML` — sous le doigt, ça tue
+le scroll tactile iOS en cours et renvoie la vue en bas.
+
+Correctif en place dans `web/index.html` (ne pas l'écraser) :
+- `guardScroll(el)` + `scrollLocked(el,margin)` : si le doigt scrolle (`scroll/touchstart/touchmove/wheel`,
+  fenêtre 1,4 s) **et** qu'on n'est pas déjà collé en bas → `refreshZoom`/`refreshChat` **skippent** le rewrite.
+- Sinon on réécrit mais on **restaure `scrollTop`** (`keep`) au lieu de sauter en bas.
+  Auto-scroll bas conservé uniquement si `first` ou si l'utilisateur était déjà en bas.
+- CSS `#zterm` et `.chat` : `-webkit-overflow-scrolling:touch; overscroll-behavior:contain; touch-action:pan-y`
+  (momentum iOS + pas de chaînage vers `.modal`).
+
+**Règle générale du projet** : tout panneau rafraîchi en boucle (`#zterm`, `#zchat`, `.cam`, Studio)
+doit passer par `guardScroll` avant tout `innerHTML=`. Sinon David perd sa lecture.
+
+## ÉTAT AU 2026-07-20 17:55 (vérifié, pas supposé)
+
+- Cause du **404 « échec de l'upload »** = le serveur **mobile** (`com.dreamnova.nova-wall-mobile`,
+  port **8791**, celui que le téléphone atteint via `wall.dreamnovamcp.com`) tournait depuis **17:03**,
+  soit AVANT l'ajout de `/api/upload` dans `server.py` (mtime **17:49**) → route inexistante → `{"error":"no route"}`.
+  Le port 8790 (desktop) avait déjà le code. **⚠️ Après toute édition de `server.py`, relancer LES DEUX :**
+  `launchctl kickstart -k gui/501/com.dreamnova.nova-wall` **et** `…-mobile`.
+- Preuves : POST `/api/upload` 404 → **200** · fichier écrit sur disque · `injected:true` ·
+  `tmux capture-pane` montre la ligne reçue par `nova-Mmoire`. JS re-vérifié `node --check` = OK.

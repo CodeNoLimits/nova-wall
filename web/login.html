@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#06080d">
+<title>NOVA WALL — Connexion</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<style>
+:root{--bg:#06080d;--card:#0d1119;--line:#1e2636;--fg:#c9d6ee;--dim:#7c8aa5;--acc:#3b82f6;--ok:#34d399;--err:#f43f5e}
+*{box-sizing:border-box}
+body{margin:0;min-height:100dvh;display:flex;align-items:center;justify-content:center;padding:24px;
+     background:radial-gradient(1200px 600px at 50% -10%,#101827 0%,var(--bg) 60%);color:var(--fg);
+     font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif}
+.card{width:min(400px,100%);background:var(--card);border:1px solid var(--line);border-radius:18px;
+      padding:30px 26px;box-shadow:0 24px 60px rgba(0,0,0,.55)}
+h1{margin:0;font-size:19px;letter-spacing:.14em;text-align:center;font-weight:600}
+.sub{margin:8px 0 26px;text-align:center;color:var(--dim);font-size:13px}
+label{display:block;font-size:12px;color:var(--dim);margin:0 0 7px}
+input{width:100%;padding:14px;font-size:17px;background:#080b12;color:var(--fg);
+      border:1px solid var(--line);border-radius:11px;outline:none;-webkit-appearance:none}
+input:focus{border-color:var(--acc)}
+button{width:100%;padding:14px;font-size:16px;font-weight:600;border:0;border-radius:11px;
+       cursor:pointer;margin-top:12px;font-family:inherit}
+.primary{background:var(--acc);color:#fff}
+.ghost{background:transparent;color:var(--fg);border:1px solid var(--line)}
+button:disabled{opacity:.5}
+.sep{display:flex;align-items:center;gap:12px;margin:22px 0 4px;color:var(--dim);font-size:11px}
+.sep::before,.sep::after{content:"";flex:1;height:1px;background:var(--line)}
+.msg{margin-top:16px;padding:11px 13px;border-radius:10px;font-size:13px;display:none}
+.msg.on{display:block}
+.msg.ok{background:rgba(52,211,153,.1);color:var(--ok);border:1px solid rgba(52,211,153,.3)}
+.msg.err{background:rgba(244,63,94,.1);color:var(--err);border:1px solid rgba(244,63,94,.3)}
+.hint{margin-top:20px;text-align:center;color:var(--dim);font-size:11.5px;line-height:1.6}
+#otpBox{display:none;margin-top:18px}
+#otpBox.on{display:block}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>NOVA WALL</h1>
+  <div class="sub">Centre de commande</div>
+
+  <label for="pw">Code de connexion</label>
+  <input id="pw" type="password" autocomplete="current-password" placeholder="•••••••••••">
+  <button class="primary" id="go">Entrer</button>
+
+  <div class="sep">ou</div>
+  <button class="ghost" id="mail">📧 Envoyer un code à mon mail</button>
+
+  <div id="otpBox">
+    <label for="otp" style="margin-top:18px">Code reçu (6 chiffres)</label>
+    <input id="otp" type="text" inputmode="numeric" autocomplete="one-time-code"
+           maxlength="6" placeholder="123456">
+    <button class="primary" id="goOtp">Valider le code</button>
+  </div>
+
+  <div class="msg" id="msg"></div>
+  <div class="hint">Une fois connecté, tu le restes — la flèche retour<br>ne te déconnecte plus.</div>
+</div>
+
+<script>
+const $=s=>document.querySelector(s);
+const msg=(t,ok)=>{const m=$("#msg");m.textContent=t;m.className="msg on "+(ok?"ok":"err");};
+async function post(url,body){
+  const r=await fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},
+                           credentials:"same-origin",body:JSON.stringify(body||{})});
+  return {status:r.status,data:await r.json().catch(()=>({}))};
+}
+async function verify(code){
+  if(!code){msg("Saisis un code.",false);return;}
+  const {data}=await post("/api/auth/verify",{code});
+  if(data.ok){msg("Connecté ✓",true);setTimeout(()=>location.replace("/"),350);}
+  else msg(data.error||"Code refusé.",false);
+}
+$("#go").onclick=()=>verify($("#pw").value.trim());
+$("#pw").onkeydown=e=>{if(e.key==="Enter")verify($("#pw").value.trim());};
+$("#goOtp").onclick=()=>verify($("#otp").value.trim());
+$("#otp").onkeydown=e=>{if(e.key==="Enter")verify($("#otp").value.trim());};
+$("#mail").onclick=async function(){
+  this.disabled=true;this.textContent="Envoi…";
+  const {data}=await post("/api/auth/request-code");
+  if(data.ok){
+    $("#otpBox").classList.add("on");$("#otp").focus();
+    // Le mail peut tomber (quota Gmail quotidien) alors que Telegram passe : le dire,
+    // sinon on cherche un mail qui n'arrivera jamais.
+    msg(data.mail===false
+        ? `⚠️ Mail indisponible aujourd'hui — code envoyé sur Telegram (valable ${data.ttl_min} min).`
+        : `Code envoyé par ${data.sent} — valable ${data.ttl_min} min.`, true);
+    this.textContent="📧 Renvoyer un code";
+  }else{
+    msg(data.error||"Envoi impossible.",false);
+    this.textContent="📧 Envoyer un code à mon mail";
+  }
+  setTimeout(()=>{this.disabled=false;},3000);
+};
+</script>
+</body>
+</html>
