@@ -1,2 +1,6 @@
-state/server.log
-state/*.tmp
+state/
+bridges/
+assets/ui-*.png
+*.log
+*.tmp
+__pycache__/
