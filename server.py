@@ -6,7 +6,7 @@ Mur de vidéosurveillance : chaque case = une "caméra" sur un terminal.
 - Caméra live + injection/bridge/fusion/loop/modèle : sessions gérées par NOVA WALL en tmux.
 Stdlib only. Anti-vol-de-focus (tmux send-keys = tape DANS le pty, jamais au niveau OS).
 """
-import os, re, json, time, glob, subprocess, threading, urllib.request
+import os, re, json, time, glob, shutil, subprocess, threading, urllib.request
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 # launchd donne un PATH minimal → tmux (homebrew) et dn-grok deviendraient introuvables
 os.environ["PATH"] = "/opt/homebrew/bin:/usr/local/bin:" + os.environ.get("PATH", "/usr/bin:/bin")
@@ -26,6 +26,9 @@ LIVE_SEC = 15 * 60
 os.makedirs(STATE, exist_ok=True)
 MANAGED_F = os.path.join(STATE, "managed.json")
 LINKS_F   = os.path.join(STATE, "links.json")
+UPLOADS   = os.path.join(STATE, "uploads")          # médias/fichiers envoyés depuis le téléphone
+MAX_UPLOAD = 512 * 1024 * 1024                      # 512 Mo (une vidéo iPhone tient largement)
+DISK_MARGIN = 3 * 1024 * 1024 * 1024                # jamais remplir le disque : 3 Go de marge (règle AGENTS.md §8)
 
 _CL = ["claude", "--dangerously-skip-permissions"]   # managed = skip-permissions (comme l'alias de David)
 MODES = {
@@ -44,6 +47,26 @@ _FS_ROOTS = [os.path.realpath(HOME), "/tmp", "/private/tmp"]
 def _fs_ok(rp):
     return any(rp == r or rp.startswith(r + "/") for r in _FS_ROOTS)
 LOOPS  = {}   # target -> {"stop": Event, "text": str, "interval": int, "count": int, "thread": Thread}
+
+# ------- uploads (photo / vidéo / audio / fichier depuis le téléphone) ---------
+_UP_KINDS = {
+    "photo":   ("📷 photo",   "Regarde cette image"),
+    "video":   ("🎬 vidéo",   "Regarde cette vidéo"),
+    "audio":   ("🎤 audio",   "Écoute/transcris cet audio (Whisper local si besoin)"),
+    "file":    ("📎 fichier", "Lis ce fichier"),
+}
+
+def safe_name(name, fallback="fichier"):
+    """Nom de fichier sûr : pas de /, pas de .., pas de contrôle, longueur bornée."""
+    name = os.path.basename((name or "").replace("\\", "/")).strip()
+    name = re.sub(r"[^A-Za-z0-9._\- ()À-ɏ]", "_", name)[:120].strip(" .")
+    return name or fallback
+
+def upload_note(kind, path, extra=""):
+    label, verb = _UP_KINDS.get(kind, _UP_KINDS["file"])
+    txt = (f"[NOVA WALL · {label} envoyé depuis le téléphone de David] {verb} : {path} — "
+           f"prends-le en compte dans ton travail en cours.")
+    return txt + ((" " + extra) if extra else "")
 
 # ------- helpers --------------------------------------------------------------
 def jload(path, default):
@@ -500,6 +523,8 @@ class H(BaseHTTPRequestHandler):
     def do_POST(self):
         u = urlparse(self.path); p = u.path
         if not self._auth(u): return self._send(401, {"error": "token requis"})
+        if p == "/api/upload":                      # corps binaire brut => AVANT _body() (qui lirait tout en JSON)
+            return self._upload(u)
         d = self._body()
         if p == "/api/spawn":
             name = re.sub(r"[^a-zA-Z0-9_-]", "", d.get("name", "") or f"t{int(time.time())%10000}")
@@ -573,6 +598,57 @@ class H(BaseHTTPRequestHandler):
         if p.startswith("/api/browser/"):
             return self._proxyb("POST", "/" + p.split("/api/browser/", 1)[1], json.dumps(d).encode())
         return self._send(404, {"error": "no route"})
+
+    def _upload(self, u):
+        """Réception d'un média/fichier depuis le téléphone : corps = octets bruts, méta en en-têtes.
+        Écriture EN FLUX (jamais tout le fichier en RAM, jamais de copie temporaire ailleurs)."""
+        q      = parse_qs(u.query)
+        target = (self.headers.get("X-NW-Target") or q.get("target", [""])[0] or "").strip()
+        kind   = (self.headers.get("X-NW-Kind")   or q.get("kind", ["file"])[0] or "file").strip()
+        raw    = urllib.parse.unquote(self.headers.get("X-NW-Name") or q.get("name", [""])[0] or "")
+        note   = urllib.parse.unquote(self.headers.get("X-NW-Note") or "")
+        if kind not in _UP_KINDS: kind = "file"
+        try: size = int(self.headers.get("Content-Length", 0))
+        except Exception: size = 0
+        if size <= 0:            return self._send(400, {"ok": False, "reason": "fichier vide"})
+        if size > MAX_UPLOAD:    return self._send(413, {"ok": False,
+                                    "reason": f"trop gros ({size//1048576} Mo > {MAX_UPLOAD//1048576} Mo)"})
+        try:                                        # ⛔ ne JAMAIS remplir le disque (AGENTS.md §8)
+            if shutil.disk_usage(STATE).free - size < DISK_MARGIN:
+                return self._send(507, {"ok": False, "reason": "disque presque plein — upload refusé"})
+        except Exception: pass
+
+        sub  = re.sub(r"[^A-Za-z0-9_-]", "_", target) or "_sans-cible"
+        ddir = os.path.join(UPLOADS, sub); os.makedirs(ddir, exist_ok=True)
+        name = safe_name(raw, {"photo": "photo.jpg", "video": "video.mp4",
+                               "audio": "audio.m4a"}.get(kind, "fichier.bin"))
+        path = os.path.join(ddir, time.strftime("%Y%m%d-%H%M%S_") + name)
+        tmp, got = path + ".part", 0
+        try:
+            with open(tmp, "wb") as f:
+                while got < size:
+                    chunk = self.rfile.read(min(262144, size - got))
+                    if not chunk: break
+                    f.write(chunk); got += len(chunk)
+            if got != size:
+                os.unlink(tmp)
+                return self._send(400, {"ok": False, "reason": f"transfert interrompu ({got}/{size})"})
+            os.replace(tmp, path)
+        except Exception as e:
+            try: os.unlink(tmp)
+            except Exception: pass
+            return self._send(500, {"ok": False, "reason": str(e)[:140]})
+
+        injected, reason = False, ""
+        if target and target in tmux_ls():
+            injected = tmux_send(target, upload_note(kind, path, note)); _cache["t"] = 0
+            chat_log(target, "me", (note or f"[{_UP_KINDS[kind][0]}] {name}"), kind=kind, path=path)
+        else:
+            reason = "caméra en lecture seule (session externe) — fichier enregistré, chemin ci-dessous"
+            with open(os.path.join(STATE, f"inject_to_{sub}.md"), "a") as f:
+                f.write(upload_note(kind, path, note) + "\n")
+        return self._send(200, {"ok": True, "path": path, "size": got, "kind": kind,
+                                "name": os.path.basename(path), "injected": injected, "reason": reason})
 
     def _ctx_of(self, sid):
         for s in build_sessions():
