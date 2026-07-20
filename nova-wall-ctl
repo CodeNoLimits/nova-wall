@@ -19,6 +19,7 @@ for s in json.load(sys.stdin)['sessions']: print(f\"{s['id']:<24} {s['kind']:<8}
   b-nav)    J /api/browser/nav "{\"t\":\"$1\",\"url\":\"$2\"}";;
   b-type)   J /api/browser/type "{\"t\":\"$1\",\"text\":\"$2\"}"; J /api/browser/key "{\"t\":\"$1\",\"key\":\"Enter\"}";;
   b-open)   J /api/browser/open "{\"url\":\"$1\"}";;
+  selftest) /opt/homebrew/bin/python3 "$(dirname "$0")/tools/selftest_upload.py" "$@";;
   *) cat <<'EOF'
 NOVA WALL — chef d'orchestre (headless).
   nova-wall-ctl sessions
@@ -32,6 +33,7 @@ NOVA WALL — chef d'orchestre (headless).
   nova-wall-ctl b-tabs                          # onglets Chrome
   nova-wall-ctl b-shot  <clé> [out.jpg]         # screenshot onglet
   nova-wall-ctl b-nav   <clé> <url> | b-type <clé> "<txt>" | b-open <url>
+  nova-wall-ctl selftest [--port 8791]          # non-régression de la voie upload (14 assertions)
 EOF
   ;;
 esac

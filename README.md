@@ -28,6 +28,15 @@ Pose la fenêtre sur ton écran en haut à droite. Auto-refresh toutes les 4 s.
 - `web/index.html` — le mur (vanilla JS, offline, flèches SVG).
 - `state/` — `managed.json` (terminaux gérés), `links.json` (liaisons), `server.log`.
 
+## Garde-disque des uploads (règle AGENTS.md §8)
+`/api/upload` accepte jusqu'à 512 Mo par fichier et n'efface jamais rien — une vidéo iPhone par jour
+suffit à empiler des dizaines de Go dans `state/uploads/`. Le balai : `tools/uploads_gc.py`.
+- Simulation (défaut, ne supprime rien) : `python3 tools/uploads_gc.py`
+- Purge réelle : `python3 tools/uploads_gc.py --apply`
+- Politique : `.part` orphelins >60 min · fichiers >21 j · total >2 Go (les plus vieux d'abord) ·
+  mode urgence si <5 Go libres. Les **3 uploads les plus récents de chaque session sont intouchables**.
+- Automatique : launchd `com.dreamnova.nova-wall-uploads-gc` (04:40 quotidien), log `state/uploads_gc.log`.
+
 ## Anti-vol-de-focus (12ème JAMAIS)
 Injection = `tmux send-keys` (tape DANS le pty, jamais au niveau macOS). Terminaux = tmux détachés cachés.
 Aucun `osascript`/`activate`/`open -a` sans `-g`. Jamais de fenêtre volée.

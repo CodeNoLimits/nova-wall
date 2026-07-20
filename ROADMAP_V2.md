@@ -13,6 +13,10 @@
 ## P2 — Intelligence
 6. **Mode Karpathy par session** : toggle sur chaque case → boucle d'amélioration continue (skill `karpathy-optimization-loop`) injectée périodiquement (réutiliser le moteur loop 🔁 + prompt Karpathy).
 7. **Agent superviseur intégré** : un agent connecté à l'app qui surveille TOUS les écrans en continu et poste des **suggestions par session + globales** (réutiliser `halfhour-session-supervisor` + fichiers `~/omniscient/session_suggestions/` → les afficher DANS le mur, badge 💡 par case).
+   ✅ **v1 LIVRÉE le 20/07 17:5x** (bridge `3d24054a`) : badge 💡N par case + panneau de lecture (copier / injecter si géré / chemin de la fiche) + aide intégrée.
+   Backend : `read_suggestions()` (cache par mtime) · champ `sug`/`sug_age_s` dans `/api/sessions` · route `GET /api/suggestions[?id=]`.
+   Preuve : parse 47/47 fiches = 100% · 33/68 tuiles badgées · panneau vérifié desktop + mobile 390px (screenshots).
+   Reste : suggestions **globales** (LATEST_INDEX) non affichées · pas d'ACK `coord msg` depuis l'UI.
 8. **Mine des douleurs développeurs** (Reddit/GitHub/forums Anthropic) : recherche des plaintes récurrentes (perte de contexte, sessions multiples, autocompact…) → features qui y répondent + arguments marketing. (dn-grok/WebSearch.)
 
 ## P3 — Utilitaires

@@ -67,6 +67,17 @@ button.primary{background:linear-gradient(180deg,#12a3bd,#0c7f96);border-color:#
 .tag.mgd{color:#bff3fb;border-color:#1f6b7a;background:rgba(34,211,238,.1)}
 .tag.cam{color:var(--dimmer)}
 .tag.cli{color:#ffd7ec;border-color:#5a2f4a;background:rgba(244,114,182,.08)}
+/* 💡 suggestions du superviseur (observe-only) */
+.icon.sug{color:#ffe7a3;border-color:#6b5a1f;background:rgba(245,179,1,.12);font-weight:700;
+  white-space:nowrap;padding:3px 7px;font-size:11px;line-height:1.3}
+.icon.sug.stale{opacity:.5}
+.sugmeta{font-size:11.5px;color:var(--dim);margin:-6px 0 10px}
+.sugitem{border:1px solid var(--border2);border-radius:10px;padding:10px 12px;margin:8px 0;
+  font-size:13px;line-height:1.45;background:rgba(245,179,1,.04)}
+.sugitem .n{color:#f5b301;font-weight:700;margin-right:6px}
+.sugitem .acts{display:flex;gap:8px;margin-top:8px}
+.sugitem .acts button{font-size:11px;padding:5px 9px}
+.sugnote{font-size:11.5px;color:var(--dimmer);margin-top:10px;line-height:1.5}
 .badge{font-size:10px;padding:2px 7px;border-radius:20px;border:1px solid var(--border2);font-weight:700;white-space:nowrap}
 .b-Opus{color:#ffe9a8;border-color:#5a4a12;background:rgba(245,179,1,.1)}
 .b-Sonnet{color:#bff3fb;border-color:#12505a;background:rgba(34,211,238,.1)}
@@ -133,6 +144,31 @@ body.listmode .goal{max-height:40px}
 .picker b{font-size:12.5px}.picker span{font-size:11px;color:var(--dim)}
 #zterm{font-size:12px;line-height:1.4;background:#03060a;border:1px solid #10251a;border-radius:10px;padding:12px;
   max-height:48vh;overflow:auto;white-space:pre-wrap;color:#8affc0}
+/* ---- vue CHAT (conversation type WhatsApp avec le terminal) ---- */
+.zt{font-size:12px;padding:5px 12px;border-radius:20px}
+.zt.on{border-color:var(--cyan);color:var(--cyan)}
+.chat{display:none;flex-direction:column;gap:8px;max-height:48vh;overflow:auto;padding:12px;
+  background:#070b14;border:1px solid var(--border);border-radius:10px}
+body.chatview .chat{display:flex}
+body.chatview #zterm{display:none}
+.bub{max-width:82%;padding:8px 11px;border-radius:14px;font-size:13px;line-height:1.45;
+  white-space:pre-wrap;word-break:break-word;position:relative}
+.bub.me{align-self:flex-end;background:#134e4a;border:1px solid #1c6f68;border-bottom-right-radius:4px}
+.bub.claude{align-self:flex-start;background:var(--panel2);border:1px solid var(--border2);border-bottom-left-radius:4px}
+.bub .when{display:block;font-size:9.5px;color:var(--dimmer);margin-top:4px;text-align:right}
+.bub img,.bub video{max-width:100%;border-radius:8px;margin-top:6px;display:block}
+.bub audio{width:100%;margin-top:6px}
+/* ---- barre média (photo/vidéo/audio/fichier depuis le téléphone) ---- */
+.mediabar{display:flex;gap:6px;margin-top:7px;flex-wrap:wrap}
+.mediabar button{flex:1 1 0;min-width:52px;font-size:12px;padding:9px 2px;border-radius:10px;
+  display:flex;flex-direction:column;align-items:center;gap:2px;line-height:1.15}
+.mediabar button b{font-size:16px;font-weight:400}
+.mediabar button small{font-size:9.5px;color:var(--dim)}
+.mediabar button.rec{border-color:var(--red);color:var(--red);animation:pulse 1.1s infinite}
+@keyframes pulse{50%{opacity:.45}}
+.upbar{height:3px;border-radius:3px;background:var(--border);margin-top:6px;overflow:hidden;display:none}
+.upbar.on{display:block}.upbar i{display:block;height:100%;background:var(--cyan);width:0;transition:width .2s}
+.upnote{font-size:10.5px;color:var(--dim);margin-top:5px;word-break:break-all}
 /* ---- mode Écrans (workspace) ---- */
 #workspace{display:flex;flex-direction:column;overflow:hidden}
 #studio{display:none;overflow:hidden}
@@ -187,6 +223,7 @@ body.listmode .goal{max-height:40px}
   #gridseg{display:none}                          /* 1 colonne forcée sur mobile */
   button,select{padding:9px 12px;font-size:14px}  /* cibles tactiles ≥40px */
   .icon{padding:9px 11px;font-size:14px}
+  .icon.sug{padding:5px 9px;font-size:12.5px}     /* badge 💡 : reste sur UNE ligne dans l'en-tête */
   .tfoot{flex-wrap:wrap;row-gap:5px}
   .writerow input{padding:10px;font-size:15px}    /* ≥16px évite le zoom iOS au focus */
   pre.cam{max-height:210px;font-size:11px}
@@ -274,6 +311,11 @@ body.listmode .goal{max-height:40px}
 <!-- expand / zoom terminal -->
 <div class="overlay" id="ov-zoom"><div class="modal">
   <h3 id="z-title">terminal</h3>
+  <div class="row" id="z-tabs" style="gap:6px;margin:-4px 0 8px">
+    <button class="zt on" data-v="chat">💬 Chat</button>
+    <button class="zt" data-v="term">🖥 Terminal</button>
+  </div>
+  <div id="zchat" class="chat"></div>
   <div id="zterm" class="mono">…</div>
   <div id="z-controls"></div>
   <div class="actions"><button onclick="closeOv()">Fermer</button></div>
@@ -297,7 +339,18 @@ body.listmode .goal{max-height:40px}
     ⑤ Sur un fichier ouvert : <b>→🖥️</b> l'envoie au Terminal, <b>→🤖</b> à l'Agent (ils le lisent et l'intègrent). ⑥ Écris en bas de chaque colonne pour leur parler. Marche pareil depuis le téléphone.</div>
   <div class="help-b"><b>🔗 LIAISONS, pas à pas.</b> ① Clique <b>🔗 Liaisons</b> (il s'allume). ② Clique la case SOURCE (elle se surligne cyan). ③ Clique la case CIBLE. ④ Choisis → / ⇄ / 🎓 dans le menu qui apparaît. ⑤ Une flèche se dessine : <b>clique la flèche</b> → OK = le transfert s'exécute maintenant (le contexte de la source est écrit DANS le terminal cible) · Annuler = supprime la flèche. ⑥ Re-clique 🔗 pour sortir du mode.</div>
   <div class="help-b"><b>⧉ FUSION, pas à pas.</b> ① Clique <b>⧉ Fusion</b>. ② Clique 2 cases (elles se surlignent or). ③ Automatique : un NOUVEAU terminal `fusion-xxx` naît (Opus+dnGrok) et reçoit les contextes des 2 parents — il te fait un résumé croisé tout seul. ④ Parle-lui via son champ « écrire… » ou en zoom 👁.</div>
+  <div class="help-b"><b>💡 Suggestions du superviseur.</b> Le daemon <code>nova_supervisor</code> observe toutes tes sessions (toutes les 30 min) et écrit une fiche de conseils par session. Quand une case en a, un badge doré <b>💡N</b> apparaît dans son en-tête : clique-le → tu lis les N suggestions, tu <b>📋 Copies</b> celle qui te sert, ou tu l'<b>➤ Injectes</b> directement si c'est un terminal géré. <b>Rien n'est appliqué tout seul</b> — c'est de l'observation, tu restes le décideur. Badge pâle = fiche de plus de 1h30.</div>
   <div class="actions"><button class="primary" onclick="closeOv()">Compris</button></div>
+</div></div>
+
+<div class="overlay" id="ov-sug"><div class="modal">
+  <h3 id="sug-title">💡 Suggestions du superviseur</h3>
+  <div class="sugmeta" id="sug-meta"></div>
+  <div id="sug-list"></div>
+  <div class="actions">
+    <button id="sug-file">📁 Ouvrir la fiche</button>
+    <button class="primary" onclick="closeOv()">Fermer</button>
+  </div>
 </div></div>
 
 <div class="picker" id="picker">
@@ -326,7 +379,7 @@ const _urlK=new URLSearchParams(location.search).get("k")||"";
 if(_urlK) try{localStorage.setItem("nw_k",_urlK);}catch(e){}      // 1er accès avec ?k= → mémorisé
 const K=_urlK||(()=>{try{return localStorage.getItem("nw_k")||"";}catch(e){return "";}})();  // app installée: pas de ?k= → on relit
 const qk=u=>K?(u+(u.includes("?")?"&":"?")+"k="+encodeURIComponent(K)):u;
-let S={sessions:[],modes:{},links:[],cols:3,linkMode:false,fuseMode:false,sel:[],linkFrom:null,filter:"",pending:null,zoomId:null,zoomTimer:null};
+let S={sessions:[],modes:{},links:[],cols:3,linkMode:false,fuseMode:false,sel:[],linkFrom:null,filter:"",pending:null,chatPending:[],chatSig:"",zoomId:null,zoomTimer:null};
 
 function toast(m){const t=$("#toast");t.textContent=m;t.classList.add("show");clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove("show"),2800);}
 async function api(u,opt){const r=await fetch(qk(u),opt);return r.json();}
@@ -423,7 +476,9 @@ function render(){
     t.innerHTML=`<div class="thead"><span class="${led}"></span>
         <span class="ttl">${esc(s.title)}</span>${s.task?`<span class="tsk">▸ ${esc(s.task)}</span>`:""}
         ${managed?'<span class="tag mgd">géré</span>':'<span class="tag cam">'+esc(s.model)+'</span>'}
-        ${clients}<span class="tid mono">${esc(s.id).slice(0,12)}</span></div>
+        ${clients}${s.sug?`<button class="icon sug${s.sug_age_s>5400?" stale":""}" data-act="sug"
+          title="${s.sug} suggestion(s) du superviseur · ${fmtAge(s.sug_age_s||0)}">💡${s.sug}</button>`:""}
+        <span class="tid mono">${esc(s.id).slice(0,12)}</span></div>
       <div class="tbody">${body}</div><div class="tfoot">${foot}</div>`;
     // header/body click = select(link/fuse) or zoom
     const hit=e=>{if(e.target.closest("input,select,button,.writerow"))return;tileClick(s);};
@@ -440,6 +495,7 @@ function render(){
     b("trbl",()=>subsession(s,"troubleshoot"));
     b("vrfy",()=>subsession(s,"verify"));
     b("bridge",()=>bridgeFolder(s));
+    b("sug",()=>openSug(s));
     const wi=t.querySelector("[data-write]");
     if(wi){wi.onclick=e=>e.stopPropagation();wi.onkeydown=e=>{if(e.key==="Enter")doInject(s.id,wi);};}
     const ms=t.querySelector(".modesel");
@@ -491,6 +547,39 @@ async function bridgeFolder(s){
   const r=await api("/api/bridge",POST({parent:s.id}));
   if(r.ok){navigator.clipboard&&navigator.clipboard.writeText(r.bridge);toast("📁 bridge créé (chemin copié): "+r.bridge);}
   else toast(r.reason||"échec");
+}
+
+/* ---- 💡 suggestions du superviseur (lecture seule — rien n'est appliqué tout seul) ---- */
+async function openSug(s){
+  $("#sug-title").textContent=`💡 Suggestions · ${s.title}`;
+  $("#sug-meta").textContent="chargement…";$("#sug-list").innerHTML="";
+  $("#ov-sug").classList.add("show");
+  const d=await api("/api/suggestions?id="+encodeURIComponent(s.id));
+  if(!d.ok||!(d.items||[]).length){
+    $("#sug-meta").textContent="";
+    $("#sug-list").innerHTML='<div class="sugnote">Aucune suggestion pour cette session (le superviseur passe toutes les 30 min).</div>';
+    return;
+  }
+  $("#sug-meta").textContent=`Cycle ${d.cycle||"?"} · ${fmtAge(d.age_s)} · session ${s.id}`;
+  const managed=s.kind==="managed";
+  $("#sug-list").innerHTML=d.items.map((it,i)=>
+    `<div class="sugitem"><span class="n">${i+1}.</span>${esc(it)}
+      <div class="acts">
+        <button data-copy="${i}">📋 Copier</button>
+        ${managed?`<button class="primary" data-inj="${i}">➤ Injecter ici</button>`:""}
+      </div></div>`).join("")+
+    (managed?"":`<div class="sugnote">🎥 Caméra externe = <b>lecture seule</b> (on n'écrit pas dedans sans voler ton focus).
+       Copie la suggestion et colle-la dans ta session, ou ouvre un terminal géré (＋ gérer) sur ce projet.</div>`);
+  $("#sug-list").querySelectorAll("[data-copy]").forEach(b=>b.onclick=()=>{
+    const t=d.items[+b.dataset.copy];
+    if(navigator.clipboard)navigator.clipboard.writeText(t);
+    toast("Suggestion copiée ✓");});
+  $("#sug-list").querySelectorAll("[data-inj]").forEach(b=>b.onclick=async()=>{
+    const r=await api("/api/inject",POST({target:s.id,text:"[NOVA WALL · suggestion superviseur] "+d.items[+b.dataset.inj]}));
+    toast(r.ok?"Injectée ✓":(r.reason||"échec"));});
+  $("#sug-file").onclick=()=>{
+    if(navigator.clipboard)navigator.clipboard.writeText(d.file||"");
+    toast("Chemin de la fiche copié : "+(d.file||"—"));};
 }
 
 /* ---- link picker + arrows ---- */
@@ -549,9 +638,38 @@ async function runOrDel(e){
 
 /* ---- zoom / expand + write ---- */
 async function zoom(s){
-  S.zoomId=s.id;$("#z-title").textContent=`${s.title} · ${s.id}`;$("#zterm").innerHTML="chargement…";$("#z-controls").innerHTML="";
+  S.zoomId=s.id;$("#z-title").textContent=`${s.title} · ${s.id}`;$("#zterm").innerHTML="chargement…";
+  $("#zchat").innerHTML="<div style='color:var(--dim);font-size:12px'>chargement de la conversation…</div>";
+  $("#z-controls").innerHTML="";document.body.classList.add("chatview");S.chatSig="";
   $("#ov-zoom").classList.add("show");await refreshZoom(true);
   clearInterval(S.zoomTimer);S.zoomTimer=setInterval(refreshZoom,2000);
+}
+$("#z-tabs").querySelectorAll("button").forEach(b=>b.onclick=()=>{
+  $("#z-tabs").querySelectorAll("button").forEach(x=>x.classList.remove("on"));b.classList.add("on");
+  document.body.classList.toggle("chatview",b.dataset.v==="chat");
+  if(b.dataset.v==="chat"){S.chatSig="";refreshChat();}
+});
+
+/* ---- conversation (bulles) ---- */
+const fmtWhen=t=>{if(!t)return"";const d=new Date(t*1000);return d.toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"});};
+function mediaHtml(r){
+  if(!r.path)return"";const src=qk("/api/media?p="+encodeURIComponent(r.path));
+  if(r.kind==="photo")return `<img src="${src}" loading="lazy">`;
+  if(r.kind==="video")return `<video src="${src}" controls playsinline></video>`;
+  if(r.kind==="audio")return `<audio src="${src}" controls></audio>`;
+  return `<div style="font-size:10.5px;color:var(--dim);margin-top:5px">📎 ${esc(r.path.split("/").pop())}</div>`;
+}
+async function refreshChat(){
+  if(!S.zoomId||!document.body.classList.contains("chatview"))return;
+  const d=await api("/api/chat?id="+encodeURIComponent(S.zoomId));
+  const rows=(d.rows||[]).concat(S.chatPending||[]);
+  const sig=rows.length+"|"+(rows.length?(rows[rows.length-1].text||"").slice(-60):"");
+  if(sig===S.chatSig)return; S.chatSig=sig;
+  const box=$("#zchat");const atBottom=box.scrollHeight-box.scrollTop-box.clientHeight<60;
+  box.innerHTML=rows.length?rows.map(r=>
+    `<div class="bub ${r.who==="me"?"me":"claude"}">${esc(r.text||"")}${mediaHtml(r)}<span class="when">${fmtWhen(r.ts)}</span></div>`
+  ).join(""):`<div style="color:var(--dim);font-size:12px">Pas encore de conversation — écris ci-dessous, ça part direct dans le terminal.</div>`;
+  if(atBottom)box.scrollTop=box.scrollHeight;
 }
 async function refreshZoom(first){
   if(!S.zoomId)return;const d=await api("/api/tile?id="+encodeURIComponent(S.zoomId));
@@ -559,18 +677,100 @@ async function refreshZoom(first){
   if(d.capture!==undefined)term.innerHTML=ansiToHtml(d.capture)||"(vide)";
   else if(d.tail)term.innerHTML=d.tail.map(r=>`<div style="margin:3px 0"><b style="color:${r.role==='assistant'?'#22d3ee':'#f5b301'}">${r.role}</b> ${esc(r.text)}</div>`).join("")||"(pas d'activité)";
   if(first||atBottom)term.scrollTop=term.scrollHeight;
-  if(first){
-    if(d.tmux){
-      $("#z-controls").innerHTML=`<label style="font-size:12px;color:var(--dim)">Écrire dans ce terminal</label>
-        <div class="row" style="margin-top:6px"><input id="z-in" placeholder="ton message… (Entrée)" style="flex:3"><button class="primary" id="z-send" style="flex:1">Injecter ➤</button></div>`;
-      const zi=$("#z-in");zi.focus();
-      const go=async()=>{const t=(zi.value||"").trim();if(!t)return;const r=await api("/api/inject",POST({target:d.id,text:t}));if(r.ok){zi.value="";toast("Injecté ✓");setTimeout(refreshZoom,500);}else toast(r.reason||"échec");};
-      $("#z-send").onclick=go;zi.onkeydown=e=>{if(e.key==="Enter")go();};
-    }else{
-      $("#z-controls").innerHTML=`<div class="camnote" style="margin-top:10px">🎥 Caméra externe = lecture seule.</div>
-        <button class="primary" style="margin-top:8px" onclick="closeOv();openNew('${esc(s_cwd_name(d))}','${esc(d.cwd)}')">＋ Ouvrir un terminal géré dans ce projet</button>`;
-    }
+  if(first)buildComposer(d);
+  refreshChat();
+}
+
+/* ---- composeur : texte + photo / vidéo / audio / micro / fichier (depuis le téléphone) ---- */
+function buildComposer(d){
+  const w=!!d.tmux;
+  $("#z-controls").innerHTML=
+    (w?`<label style="font-size:12px;color:var(--dim)">Écrire dans ce terminal</label>`
+      :`<div class="camnote" style="margin:10px 0 4px">🎥 Caméra externe = lecture seule (les fichiers sont quand même enregistrés sur le Mac).</div>`)+
+    `<div class="row" style="margin-top:6px">
+       <input id="z-in" placeholder="${w?"ton message… (Entrée)":"légende du fichier (optionnel)"}" style="flex:3">
+       <button class="primary" id="z-send" style="flex:1" ${w?"":"disabled"}>Injecter ➤</button>
+     </div>
+     <div class="mediabar">
+       <button id="mb-photo"><b>📷</b><small>Photo</small></button>
+       <button id="mb-video"><b>🎬</b><small>Vidéo</small></button>
+       <button id="mb-audio"><b>🎵</b><small>Audio</small></button>
+       <button id="mb-rec"><b>🎤</b><small>Enregistrer</small></button>
+       <button id="mb-file"><b>📎</b><small>Fichier</small></button>
+     </div>
+     <div class="upbar"><i></i></div><div class="upnote"></div>
+     <input type="file" id="f-photo" accept="image/*" multiple hidden>
+     <input type="file" id="f-video" accept="video/*" hidden>
+     <input type="file" id="f-audio" accept="audio/*" hidden>
+     <input type="file" id="f-file" multiple hidden>`+
+    (w?"":`<button class="primary" style="margin-top:10px" onclick="closeOv();openNew('${esc(s_cwd_name(d))}','${esc(d.cwd)}')">＋ Ouvrir un terminal géré dans ce projet</button>`);
+
+  const zi=$("#z-in");
+  if(w){
+    const go=async()=>{const t=(zi.value||"").trim();if(!t)return;
+      S.chatPending=[{who:"me",text:t,ts:Date.now()/1000}];S.chatSig="";refreshChat();
+      const r=await api("/api/inject",POST({target:d.id,text:t}));
+      if(r.ok){zi.value="";toast("Envoyé ✓");setTimeout(()=>{S.chatPending=[];S.chatSig="";refreshChat();refreshZoom();},600);}
+      else{S.chatPending=[];toast(r.reason||"échec");}};
+    $("#z-send").onclick=go;zi.onkeydown=e=>{if(e.key==="Enter")go();};
   }
+  const pick=(id,kind)=>{const inp=$("#"+id);
+    inp.onchange=()=>{[...inp.files].forEach(f=>upload(f,kind,d.id));inp.value="";};return()=>inp.click();};
+  $("#mb-photo").onclick=pick("f-photo","photo");
+  $("#mb-video").onclick=pick("f-video","video");
+  $("#mb-audio").onclick=pick("f-audio","audio");
+  $("#mb-file").onclick =pick("f-file","file");
+  $("#mb-rec").onclick  =()=>toggleRec(d.id);
+}
+
+/* ---- envoi d'un fichier (flux, avec barre de progression) ---- */
+function upload(file,kind,target){
+  const bar=$(".upbar"),fill=bar&&bar.querySelector("i"),note=$(".upnote");
+  const mo=(file.size/1048576).toFixed(1);
+  if(bar){bar.classList.add("on");fill.style.width="0%";}
+  if(note)note.textContent=`Envoi ${file.name} (${mo} Mo)…`;
+  const x=new XMLHttpRequest();
+  x.open("POST",qk("/api/upload"),true);
+  x.setRequestHeader("Content-Type","application/octet-stream");
+  x.setRequestHeader("X-NW-Target",target||"");
+  x.setRequestHeader("X-NW-Kind",kind);
+  x.setRequestHeader("X-NW-Name",encodeURIComponent(file.name||"fichier"));
+  const cap=($("#z-in")&&$("#z-in").value.trim())||"";
+  if(cap)x.setRequestHeader("X-NW-Note",encodeURIComponent(cap));
+  x.upload.onprogress=e=>{if(fill&&e.lengthComputable)fill.style.width=(e.loaded/e.total*100).toFixed(0)+"%";};
+  x.onload=()=>{
+    let r={};try{r=JSON.parse(x.responseText);}catch(e){}
+    if(bar)setTimeout(()=>bar.classList.remove("on"),700);
+    if(x.status===200&&r.ok){
+      if($("#z-in"))$("#z-in").value="";
+      if(note)note.textContent=(r.injected?"✅ envoyé au terminal · ":"📁 enregistré (caméra lecture seule) · ")+r.path;
+      toast(r.injected?"Fichier envoyé ✓":"Fichier enregistré ✓");
+      S.chatSig="";setTimeout(()=>{refreshChat();refreshZoom();},700);
+    }else{
+      if(note)note.textContent="❌ "+((r&&r.reason)||("HTTP "+x.status));
+      toast("Échec upload");
+    }};
+  x.onerror=()=>{if(note)note.textContent="❌ réseau interrompu";toast("Échec upload");};
+  x.send(file);
+}
+
+/* ---- enregistrement vocal (micro du téléphone) ---- */
+let REC=null;
+async function toggleRec(target){
+  const btn=$("#mb-rec");
+  if(REC&&REC.state==="recording"){REC.stop();return;}
+  if(!navigator.mediaDevices||!window.MediaRecorder){toast("Micro non dispo (HTTPS requis)");return;}
+  try{
+    const st=await navigator.mediaDevices.getUserMedia({audio:true});
+    const mime=["audio/mp4","audio/webm"].find(m=>MediaRecorder.isTypeSupported(m))||"";
+    REC=new MediaRecorder(st,mime?{mimeType:mime}:undefined);const parts=[];
+    REC.ondataavailable=e=>{if(e.data.size)parts.push(e.data);};
+    REC.onstop=()=>{
+      st.getTracks().forEach(t=>t.stop());btn.classList.remove("rec");btn.querySelector("small").textContent="Enregistrer";
+      const ext=(REC.mimeType||"").includes("mp4")?"m4a":"webm";
+      upload(new File(parts,"memo-"+Date.now()+"."+ext,{type:REC.mimeType||"audio/webm"}),"audio",target);REC=null;};
+    REC.start();btn.classList.add("rec");btn.querySelector("small").textContent="Stop ■";toast("Enregistrement…");
+  }catch(e){toast("Micro refusé");}
 }
 function s_cwd_name(d){return (d.project||"proj").replace(/[^a-zA-Z0-9_-]/g,"");}
 

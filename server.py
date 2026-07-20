@@ -10,7 +10,7 @@ import os, re, json, time, glob, shutil, subprocess, threading, urllib.request
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 # launchd donne un PATH minimal → tmux (homebrew) et dn-grok deviendraient introuvables
 os.environ["PATH"] = "/opt/homebrew/bin:/usr/local/bin:" + os.environ.get("PATH", "/usr/bin:/bin")
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import urlparse, parse_qs, unquote
 
 HOME     = os.path.expanduser("~")
 ROOT     = os.path.join(HOME, "nova-wall")
@@ -67,6 +67,87 @@ def upload_note(kind, path, extra=""):
     txt = (f"[NOVA WALL · {label} envoyé depuis le téléphone de David] {verb} : {path} — "
            f"prends-le en compte dans ton travail en cours.")
     return txt + ((" " + extra) if extra else "")
+
+# ------- chat (conversation type WhatsApp avec un terminal) -------------------
+CHAT_DIR = os.path.join(STATE, "chat")
+
+def chat_file(target):
+    os.makedirs(CHAT_DIR, exist_ok=True)
+    return os.path.join(CHAT_DIR, re.sub(r"[^A-Za-z0-9_-]", "_", target or "_") + ".jsonl")
+
+def chat_log(target, who, text, kind=None, path=None):
+    """Journalise ce que David envoie (le côté « moi » de la conversation)."""
+    try:
+        with open(chat_file(target), "a") as f:
+            f.write(json.dumps({"ts": time.time(), "who": who, "text": text,
+                                "kind": kind, "path": path}, ensure_ascii=False) + "\n")
+    except Exception: pass
+
+
+def _iso_ts(s):
+    try:
+        import datetime
+        return datetime.datetime.fromisoformat((s or "").replace("Z", "+00:00")).timestamp()
+    except Exception: return 0
+
+def jsonl_for_tmux(target, cwd):
+    """Retrouve le .jsonl du Claude qui tourne DANS ce terminal tmux.
+    Discriminant PROUVÉ : la DATE DE NAISSANCE du fichier (st_birthtime, macOS) est postérieure au
+    démarrage du terminal tmux — un simple mtime ou l'horodatage de la 1re ligne se trompaient de
+    session quand deux claude partagent le même dossier (mesuré : 14 s d'écart suffisent à tromper).
+    Parmi les candidats nés après, on prend le plus récemment écrit (gère un /clear qui recrée un fichier).
+    """
+    cwd = cwd or HOME                       # macOS : /tmp -> /private/tmp => essayer les deux graphies
+    dirs = [os.path.join(PROJECTS, c.replace("/", "-"))
+            for c in dict.fromkeys([cwd, os.path.realpath(cwd)])]
+    dirs = [x for x in dirs if os.path.isdir(x)]
+    if not dirs: return None
+    r = sh(["tmux", "display", "-p", "-t", target, "#{session_created}"])
+    try: born = int(r.stdout.strip())
+    except Exception: return None
+    best = None
+    for fp in [f for d in dirs for f in glob.glob(os.path.join(d, "*.jsonl"))]:
+        try:
+            st = os.stat(fp)
+            if getattr(st, "st_birthtime", st.st_mtime) < born - 5: continue
+            if best is None or st.st_mtime > best[0]: best = (st.st_mtime, fp)
+        except Exception: continue
+    return best[1] if best else None
+
+def parse_jsonl_chat(jsonl, limit=40):
+    """Le .jsonl contient les DEUX côtés (user + assistant) => vraie conversation."""
+    rows = []
+    for line in tail_bytes(jsonl, 400000).splitlines():
+        try: o = json.loads(line)
+        except Exception: continue
+        m = o.get("message") if isinstance(o.get("message"), dict) else None
+        if not m: continue
+        role = m.get("role")
+        if role not in ("user", "assistant"): continue
+        c, txt, tools = m.get("content"), "", []
+        if isinstance(c, str): txt = c
+        elif isinstance(c, list):
+            for b in c:
+                if not isinstance(b, dict): continue
+                if b.get("type") == "text": txt += b.get("text", "")
+                elif b.get("type") == "tool_use": tools.append(b.get("name", "tool"))
+                elif b.get("type") == "tool_result": txt += ""   # bruit : on n'affiche pas
+        txt = txt.strip()
+        if not txt and tools: txt = "⚙ " + ", ".join(dict.fromkeys(tools))
+        if not txt: continue
+        if txt.startswith("<") or "system-reminder" in txt[:80]: continue
+        rows.append({"who": "me" if role == "user" else "claude",
+                     "text": txt[:4000], "ts": _iso_ts(o.get("timestamp"))})
+    return rows[-limit:]
+
+def chat_mine(target, limit=60):
+    rows = []
+    try:
+        for line in tail_bytes(chat_file(target), 120000).splitlines():
+            try: rows.append(json.loads(line))
+            except Exception: pass
+    except Exception: pass
+    return rows[-limit:]
 
 # ------- helpers --------------------------------------------------------------
 def jload(path, default):
@@ -335,6 +416,44 @@ def _title_worker():
 
 threading.Thread(target=_title_worker, daemon=True).start()
 
+# ------- suggestions du superviseur (~/omniscient/session_suggestions) --------
+# Le daemon `nova_supervisor` (/30 min, observe-only) écrit une fiche par session.
+# Le mur ne fait que la LIRE et l'afficher : rien n'est appliqué automatiquement.
+SUGGEST_DIR = os.path.join(HOME, "omniscient", "session_suggestions")
+_sug_cache  = {}    # sid -> {"mtime": float, "data": {...}}
+
+def _parse_suggestions(txt):
+    """Extrait le cycle + la liste numérotée de la section '## Suggestions'."""
+    cycle = ""
+    m = re.search(r"Cycle\s*:\s*\*\*(.+?)\*\*", txt)
+    if m: cycle = m.group(1).strip()
+    m = re.search(r"^##\s*Suggestions.*?$(.*?)(?=^##\s|\Z)", txt, re.S | re.M)
+    body = m.group(1) if m else ""
+    items = []
+    for line in body.splitlines():
+        mm = re.match(r"\s*\d+\.\s+(.*\S)\s*$", line)
+        if mm:
+            items.append(mm.group(1).strip())
+        elif items and line.strip() and not line.lstrip().startswith(("#", ">", "-", "*", "_", "|")):
+            items[-1] = (items[-1] + " " + line.strip())     # continuation d'un item multi-lignes
+    return {"cycle": cycle, "items": [i[:600] for i in items[:8]]}
+
+def read_suggestions(sid):
+    """Fiche superviseur d'une session (cache par mtime). {} si absente/illisible."""
+    if not sid or "/" in sid or ".." in sid: return {}
+    fp = os.path.join(SUGGEST_DIR, sid + ".md")
+    try: st = os.stat(fp)
+    except Exception: return {}
+    c = _sug_cache.get(sid)
+    if c and c["mtime"] == st.st_mtime: return c["data"]
+    try:
+        with open(fp, "r", encoding="utf-8", errors="replace") as f: txt = f.read(60000)
+    except Exception: return {}
+    d = _parse_suggestions(txt)
+    d.update({"file": fp, "mtime": st.st_mtime, "age_s": round(time.time() - st.st_mtime)})
+    _sug_cache[sid] = {"mtime": st.st_mtime, "data": d}
+    return d
+
 # ------- sessions view --------------------------------------------------------
 def build_sessions():
     with _lock:
@@ -352,7 +471,9 @@ def build_sessions():
         proj = os.path.basename(s.get("cwd", "").rstrip("/")) or "~"
         sid = s.get("session", "")[:8]
         gt = gen_titles.get(sid, {})
+        sug = read_suggestions(sid)
         out.append({
+            "sug": len(sug.get("items", [])), "sug_age_s": sug.get("age_s"),
             "id": sid, "kind": "external",
             "cwd": s.get("cwd", ""), "project": proj,
             "title": gt.get("t") or make_title(s.get("goal"), s.get("clients", []), proj),
@@ -434,6 +555,55 @@ class H(BaseHTTPRequestHandler):
         if p == "/api/sessions":
             return self._send(200, {"sessions": build_sessions(),
                                     "modes": {k: v["label"] for k, v in MODES.items()}, "ts": time.time()})
+        if p == "/api/suggestions":                 # fiches du superviseur (lecture seule, rien n'est appliqué)
+            sid = parse_qs(u.query).get("id", [""])[0]
+            if sid:
+                d = read_suggestions(sid)
+                return self._send(200, dict({"ok": bool(d.get("items")), "id": sid}, **d))
+            idx = []
+            for fp in sorted(glob.glob(os.path.join(SUGGEST_DIR, "*.md")),
+                             key=os.path.getmtime, reverse=True)[:80]:
+                s2 = os.path.basename(fp)[:-3]
+                if s2.upper().startswith("LATEST"): continue
+                d = read_suggestions(s2)
+                if d.get("items"):
+                    idx.append({"id": s2, "n": len(d["items"]), "age_s": d["age_s"], "cycle": d.get("cycle", "")})
+            return self._send(200, {"ok": True, "sessions": idx})
+        if p == "/api/media":                       # aperçu d'un fichier uploadé (jamais hors /state/uploads)
+            rp = os.path.realpath(parse_qs(u.query).get("p", [""])[0])
+            if not rp.startswith(os.path.realpath(UPLOADS) + "/") or not os.path.isfile(rp):
+                return self._send(403, {"error": "hors zone uploads"})
+            ext = os.path.splitext(rp)[1].lower()
+            ct = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".gif": "image/gif",
+                  ".heic": "image/heic", ".webp": "image/webp", ".mp4": "video/mp4", ".mov": "video/quicktime",
+                  ".m4a": "audio/mp4", ".mp3": "audio/mpeg", ".wav": "audio/wav",
+                  ".webm": "video/webm", ".ogg": "audio/ogg"}.get(ext, "application/octet-stream")
+            with open(rp, "rb") as f: return self._send(200, f.read(), ct)
+        if p == "/api/chat":
+            sid = parse_qs(u.query).get("id", [""])[0]
+            for s in build_sessions():
+                if s["id"] != sid: continue
+                jf = (jsonl_for_tmux(s["tmux"], s.get("cwd")) if s.get("tmux")
+                      else next(iter(glob.glob(os.path.join(PROJECTS, "**", f"{sid}*.jsonl"),
+                                               recursive=True)), None))
+                rows = parse_jsonl_chat(jf) if jf else []
+                if not rows:                       # pas encore de .jsonl (terminal qui démarre) → mes envois
+                    rows = [{"who": r.get("who", "me"), "text": r.get("text", ""), "ts": r.get("ts", 0),
+                             "kind": r.get("kind"), "path": r.get("path")} for r in chat_mine(sid)]
+                else:                              # ré-attacher les médias envoyés (aperçu photo/vidéo/audio)
+                    med = [m for m in chat_mine(sid) if m.get("path")]
+                    for m in med:
+                        base = os.path.basename(m["path"])
+                        for r in rows:
+                            if r["who"] == "me" and base.split("_", 1)[-1][:24] in r["text"]:
+                                r["kind"], r["path"] = m.get("kind"), m["path"]; break
+                        else:
+                            rows.append({"who": "me", "text": m.get("text", ""), "ts": m.get("ts", 0),
+                                         "kind": m.get("kind"), "path": m["path"]})
+                    rows.sort(key=lambda r: r.get("ts") or 0)
+                return self._send(200, {"ok": True, "id": sid, "rows": rows,
+                                        "writable": bool(s.get("tmux")), "source": jf or "chat-local"})
+            return self._send(200, {"ok": False, "rows": [], "reason": "session introuvable"})
         if p == "/api/tile":
             sid = parse_qs(u.query).get("id", [""])[0]
             for s in build_sessions():
@@ -540,6 +710,7 @@ class H(BaseHTTPRequestHandler):
                     "reason": "Caméra en lecture seule (session externe, hors tmux). "
                               "Ouvre-la en terminal géré pour écrire dedans."})
             ok = tmux_send(target, text); _cache["t"] = 0
+            if ok: chat_log(target, "me", text)
             return self._send(200, {"ok": ok, "managed": True})
         if p == "/api/setmode":
             target = d.get("target", ""); mode = d.get("mode", "opus")
@@ -605,8 +776,8 @@ class H(BaseHTTPRequestHandler):
         q      = parse_qs(u.query)
         target = (self.headers.get("X-NW-Target") or q.get("target", [""])[0] or "").strip()
         kind   = (self.headers.get("X-NW-Kind")   or q.get("kind", ["file"])[0] or "file").strip()
-        raw    = urllib.parse.unquote(self.headers.get("X-NW-Name") or q.get("name", [""])[0] or "")
-        note   = urllib.parse.unquote(self.headers.get("X-NW-Note") or "")
+        raw    = unquote(self.headers.get("X-NW-Name") or q.get("name", [""])[0] or "")
+        note   = unquote(self.headers.get("X-NW-Note") or "")
         if kind not in _UP_KINDS: kind = "file"
         try: size = int(self.headers.get("Content-Length", 0))
         except Exception: size = 0
