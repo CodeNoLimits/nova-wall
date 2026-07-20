@@ -12,32 +12,9 @@ import websocket  # websocket-client
 
 CDP_HTTP = os.environ.get("NOVA_WALL_CDP_HTTP", "http://127.0.0.1:9222")
 PORT     = int(os.environ.get("NOVA_WALL_BROWSER_PORT", "8792"))
-# Le 9222 de David va et vient (il ferme son navigateur). On bascule alors tout seul
-# sur une instance du pool (9230-9240) : le mur ne montre plus jamais un écran vide.
-_POOL_PORTS = [9222] + list(range(9230, 9241))
-_cdp = {"base": CDP_HTTP, "t": 0}
-
-def _alive(base):
-    try:
-        with urllib.request.urlopen(base + "/json/version", timeout=2) as r:
-            json.loads(r.read()); return True
-    except Exception: return False
-
-def _cdp_base():
-    """Endpoint CDP courant, revalidé au plus toutes les 5 s."""
-    now = time.time()
-    if now - _cdp["t"] < 5 and _alive(_cdp["base"]):
-        return _cdp["base"]
-    for prt in _POOL_PORTS:
-        base = f"http://127.0.0.1:{prt}"
-        if _alive(base):
-            _cdp["base"] = base; _cdp["t"] = now
-            return base
-    _cdp["t"] = now
-    return _cdp["base"]
 
 def http_json(path):
-    with urllib.request.urlopen(_cdp_base() + path, timeout=5) as r:
+    with urllib.request.urlopen(CDP_HTTP + path, timeout=5) as r:
         return json.loads(r.read())
 
 def targets():
@@ -156,7 +133,7 @@ class H(BaseHTTPRequestHandler):
             img = shot(q.get("t", [""])[0], qual, sc)
             return self._s(200, img, "image/jpeg") if img else self._s(404, {"error": "no shot"})
         if u.path == "/health":
-            return self._s(200, {"ok": True, "tabs": len(targets()), "cdp": _cdp_base()})
+            return self._s(200, {"ok": True, "tabs": len(targets())})
         return self._s(404, {"error": "no route"})
     def do_POST(self):
         u = urlparse(self.path); d = self._b()
