@@ -11,16 +11,6 @@
 <link rel="stylesheet" href="vendor/xterm.css">
 <script src="vendor/xterm.js"></script>
 <script src="vendor/xterm-fit.js"></script>
-<link rel="stylesheet" href="vendor/cm.css"><link rel="stylesheet" href="vendor/cm-dark.css"><link rel="stylesheet" href="vendor/cm-dialog.css">
-<script src="vendor/cm.js"></script>
-<script src="vendor/cmmode/python.js"></script><script src="vendor/cmmode/javascript.js"></script>
-<script src="vendor/cmmode/shell.js"></script><script src="vendor/cmmode/markdown.js"></script>
-<script src="vendor/cmmode/css.js"></script><script src="vendor/cmmode/xml.js"></script>
-<script src="vendor/cmmode/htmlmixed.js"></script><script src="vendor/cmmode/clike.js"></script>
-<script src="vendor/cmmode/addon-dialog.js"></script><script src="vendor/cmmode/addon-searchcursor.js"></script>
-<script src="vendor/cmmode/addon-search.js"></script><script src="vendor/cmmode/addon-jump-to-line.js"></script>
-<script src="vendor/cmmode/addon-matchbrackets.js"></script><script src="vendor/cmmode/addon-closebrackets.js"></script>
-<script src="vendor/cmmode/addon-active-line.js"></script>
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" type="image/png" href="icon-192.png">
 <title>NOVA WALL — Command Center</title>
@@ -206,30 +196,7 @@ body.chatview #zterm{display:none}
 .st-col pre.cam{flex:1;max-height:none;margin:6px;min-height:0;overflow:auto}
 .xwrap{flex:1;min-height:0;margin:6px;border-radius:8px;overflow:hidden;background:#03060a;border:1px solid #10251a;position:relative}
 .xwrap .xterm{height:100%;padding:4px}
-.edwrap{flex:1;position:relative;min-height:0;display:flex;flex-direction:column}
-.edtabs{display:flex;gap:3px;padding:4px 6px 0;overflow-x:auto;background:rgba(0,0,0,.3);flex:none;scrollbar-width:none}
-.edtabs::-webkit-scrollbar{display:none}
-.edtab{flex:none;display:flex;align-items:center;gap:6px;padding:6px 9px;border-radius:8px 8px 0 0;font-size:11.5px;
-  background:#0a1220;border:1px solid var(--border2);border-bottom:0;color:var(--dim);cursor:pointer;white-space:nowrap}
-.edtab.on{background:#03060a;color:#eaf1ff;border-color:var(--cyan)}
-.edtab b{font-weight:600}.edtab .x{opacity:.5;font-size:13px}.edtab .dirty{color:var(--amber)}
-.CodeMirror{flex:1;height:auto!important;min-height:0;font:12px "SF Mono",Menlo,monospace}
-.cm-s-material-darker.CodeMirror{background:#03060a}
-#palette{position:fixed;inset:0;background:rgba(3,5,10,.75);display:none;align-items:flex-start;justify-content:center;z-index:75;padding-top:12vh}
-#palette.show{display:flex}
-#palette .box{width:min(560px,92vw);background:#0c1424;border:1px solid var(--cyan);border-radius:14px;overflow:hidden;box-shadow:0 24px 70px rgba(0,0,0,.7)}
-#palette input{width:100%;padding:14px;font-size:15px;background:#0a1220;border:0;border-bottom:1px solid var(--border);color:var(--txt);outline:none}
-#palette .res{max-height:46vh;overflow:auto}
-#palette .r{padding:9px 13px;font-size:12.5px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,.03)}
-#palette .r:hover,#palette .r.sel{background:rgba(34,211,238,.14)}
-#palette .r small{color:var(--dimmer);display:block;font-size:10.5px}
-#gitpanel{position:absolute;inset:0;background:var(--panel);display:none;flex-direction:column;z-index:6}
-#gitpanel.show{display:flex}
-#gitpanel .gf{padding:7px 10px;font-size:12px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,.04);display:flex;gap:8px}
-#gitpanel .gf:hover{background:rgba(34,211,238,.08)}
-#gitpanel .gx{font-family:monospace;color:var(--amber);width:22px}
-pre.gdiff{margin:0;padding:10px;font:11px "SF Mono",Menlo,monospace;background:#03060a;overflow:auto;flex:1;min-height:0;white-space:pre-wrap}
-pre.gdiff .a{color:#8affc0}pre.gdiff .d{color:#ff9aa8}pre.gdiff .h{color:#7aa2ff}
+.edwrap{flex:1;position:relative;min-height:0;display:flex}
 .edwrap textarea,.edwrap pre.hl{margin:0;flex:1;padding:10px;font:11.5px "SF Mono",Menlo,monospace;line-height:1.5;
   white-space:pre-wrap;word-break:break-word;border:0;min-height:0;overflow:auto}
 .edwrap pre.hl{position:absolute;inset:0;pointer-events:none;color:#c9d6ee;background:#03060a}
@@ -313,13 +280,10 @@ pre.gdiff .a{color:#8affc0}pre.gdiff .d{color:#ff9aa8}pre.gdiff .h{color:#7aa2ff
 <div id="workspace" style="display:none"></div>
 <div id="studio"><div class="st-grid">
   <div class="st-col" style="position:relative">
-    <div class="st-h">🗂️ Fichiers<button class="icon" onclick="fsGo(fsState.path)" title="rafraîchir">↻</button>
-      <button class="icon" onclick="gitOpen()" title="Git">⎇</button>
-      <button class="icon" onclick="palOpen()" title="Rechercher (Cmd+P)">🔎</button></div>
+    <div class="st-h">🗂️ Fichiers<button class="icon" onclick="fsGo(fsState.path)" title="rafraîchir">↻</button></div>
     <div class="fs-crumb" id="fs-crumb"></div>
     <div class="st-body" id="fs-list"></div>
     <div class="fs-prev" id="fs-prev" style="display:none"></div>
-    <div id="gitpanel"></div>
   </div>
   <div class="st-col">
     <div class="st-h">🖥️ Terminal <select id="st-term" onchange="stPick('term',this.value)"></select>
@@ -425,7 +389,6 @@ pre.gdiff .a{color:#8affc0}pre.gdiff .d{color:#ff9aa8}pre.gdiff .h{color:#7aa2ff
   <button id="install-go" class="primary">Installer</button>
   <button id="install-no">✕</button>
 </div>
-<div id="palette"><div class="box"><input id="pal-in" placeholder="Rechercher un fichier…  (Cmd/Ctrl+P)" autocomplete="off"><div class="res" id="pal-res"></div></div></div>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -1071,75 +1034,66 @@ async function fsGo(path){
   $("#fs-list").innerHTML=h;
 }
 window.fsGo=fsGo;
-const ED={tabs:[],cur:null,cm:null};
-function edMode(name){const e=(name.split(".").pop()||"").toLowerCase();
-  return {py:"python",js:"javascript",mjs:"javascript",jsx:"javascript",ts:"javascript",json:{name:"javascript",json:true},
-    sh:"shell",bash:"shell",zsh:"shell",md:"markdown",markdown:"markdown",css:"css",html:"htmlmixed",htm:"htmlmixed",
-    xml:"xml",c:"text/x-csrc",h:"text/x-csrc",cpp:"text/x-c++src",java:"text/x-java"}[e]||null;}
-function edRenderTabs(){
-  const el=document.getElementById("ed-tabs");if(!el)return;
-  el.innerHTML=ED.tabs.map((t,i)=>`<div class="edtab ${t.path===ED.cur?"on":""}" data-i="${i}">
-    <b>${esc(t.name)}</b>${t.dirty?'<span class="dirty">●</span>':''}<span class="x" data-close="${i}">✕</span></div>`).join("");
-  el.querySelectorAll(".edtab").forEach(d=>d.onclick=ev=>{
-    if(ev.target.dataset.close!==undefined){edClose(+ev.target.dataset.close);ev.stopPropagation();return;}
-    edSwitch(ED.tabs[+d.dataset.i].path);});
-}
-function edSwitch(path){
-  const t=ED.tabs.find(x=>x.path===path);if(!t||!ED.cm)return;
-  const c=ED.tabs.find(x=>x.path===ED.cur); if(c)c.text=ED.cm.getValue();
-  ED.cur=path;ED.cm.swapDoc(t.doc);ED.cm.setOption("mode",edMode(t.name));edRenderTabs();ED.cm.focus();
-}
-function edClose(i){
-  const t=ED.tabs[i];if(!t)return;
-  if(t.dirty&&!confirm("« "+t.name+" » a des modifications non sauvées. Fermer quand même ?"))return;
-  ED.tabs.splice(i,1);
-  if(ED.cur===t.path){ if(ED.tabs.length){edSwitch(ED.tabs[Math.max(0,i-1)].path);} else {$("#fs-prev").style.display="none";ED.cur=null;ED.cm=null;} }
-  else edRenderTabs();
-}
 window.fsOpen=async function(path){
   const ext=(path.split(".").pop()||"").toLowerCase();
   const IMG=["png","jpg","jpeg","gif","webp","svg"],VID=["mp4","mov","webm","m4v"],AUD=["mp3","wav","m4a"];
-  const name=path.split("/").pop();
-  const sendBtns=`<button class="icon" onclick="fsSend('term','${esc(path)}')" title="envoyer au terminal">→🖥️</button>
-    <button class="icon" onclick="fsSend('agent','${esc(path)}')" title="envoyer à l'agent">→🤖</button>`;
   if(IMG.includes(ext)||VID.includes(ext)||AUD.includes(ext)){
     const pv=$("#fs-prev");pv.style.display="flex";
-    const src=qk("/api/fs/raw?path="+encodeURIComponent(path));
+    const name=path.split("/").pop();const src=qk("/api/fs/raw?path="+encodeURIComponent(path));
     const media=IMG.includes(ext)?`<img src="${src}" style="max-width:100%;max-height:100%;object-fit:contain">`
       :VID.includes(ext)?`<video src="${src}" controls playsinline style="max-width:100%;max-height:100%"></video>`
       :`<audio src="${src}" controls style="width:100%"></audio>`;
-    pv.innerHTML=`<div class="st-h">🖼️ ${esc(name)} ${sendBtns}<button class="icon" onclick="$('#fs-prev').style.display='none'">✕</button></div>
+    pv.innerHTML=`<div class="st-h">🖼️ ${esc(name)}
+        <button class="icon" onclick="fsSend('term','${esc(path)}')" title="envoyer au terminal">→🖥️</button>
+        <button class="icon" onclick="fsSend('agent','${esc(path)}')" title="envoyer à l'agent">→🤖</button>
+        <button class="icon" onclick="$('#fs-prev').style.display='none'">✕</button></div>
       <div style="flex:1;display:flex;align-items:center;justify-content:center;background:#000;min-height:0;padding:8px">${media}</div>`;
     return;
   }
   const d=await api("/api/fs/read?path="+encodeURIComponent(path));
-  if(d.text===undefined){toast(d.binary?"fichier binaire":"fichier trop volumineux");return;}
   const pv=$("#fs-prev");pv.style.display="flex";
-  if(!ED.cm||!document.getElementById("ed-host")){
-    pv.innerHTML=`<div class="st-h" id="ed-head"></div><div class="edtabs" id="ed-tabs"></div><div class="edwrap" id="ed-host"></div>`;
-    ED.tabs=[];ED.cur=null;
-    ED.cm=CodeMirror(document.getElementById("ed-host"),{value:"",theme:"material-darker",lineNumbers:true,
-      lineWrapping:true,matchBrackets:true,autoCloseBrackets:true,styleActiveLine:true,
-      extraKeys:{"Cmd-S":()=>fsSave(ED.cur),"Ctrl-S":()=>fsSave(ED.cur),
-                 "Cmd-P":()=>palOpen(),"Ctrl-P":()=>palOpen(),
-                 "Cmd-F":"findPersistent","Ctrl-F":"findPersistent"}});
-    ED.cm.on("change",()=>{const t=ED.tabs.find(x=>x.path===ED.cur);if(t&&!t.dirty){t.dirty=true;edRenderTabs();}});
+  const name=path.split("/").pop();
+  const sendBtns=`<button class="icon" onclick="fsSend('term','${esc(path)}')" title="envoyer au terminal">→🖥️</button>
+    <button class="icon" onclick="fsSend('agent','${esc(path)}')" title="envoyer à l'agent">→🤖</button>`;
+  if(d.text!==undefined){
+    const fext=(name.split(".").pop()||"").toLowerCase();
+    const lang={py:"py",js:"js",mjs:"js",ts:"js",jsx:"js",html:"js",css:"js",json:"js",sh:"sh",bash:"sh",zsh:"sh",md:"",txt:""}[fext]??"";
+    pv.innerHTML=`<div class="st-h">📄 ${esc(name)} ${sendBtns}<button class="icon" onclick="fsSave('${esc(path)}')" title="sauver">💾</button><button class="icon" onclick="$('#fs-prev').style.display='none'">✕</button></div>
+      <div class="edwrap"><pre class="hl" id="fs-hl"></pre><textarea id="fs-ta" spellcheck="false"></textarea></div>`;
+    const ta=$("#fs-ta"),hl=$("#fs-hl");ta.value=d.text;
+    const paint=()=>{hl.innerHTML=hlCode(ta.value,lang);};paint();
+    ta.oninput=paint;ta.onscroll=()=>{hl.scrollTop=ta.scrollTop;hl.scrollLeft=ta.scrollLeft;};
+  }else{
+    pv.innerHTML=`<div class="st-h">📄 ${esc(name)} ${sendBtns}<button class="icon" onclick="$('#fs-prev').style.display='none'">✕</button></div><div class="st-body" style="color:var(--dim)">${d.binary?"binaire":"fichier volumineux"} · ${(d.size/1e6).toFixed(1)} Mo — envoie le CHEMIN au terminal/agent avec les boutons ci-dessus.</div>`;
   }
-  $("#ed-head").innerHTML=`📄 <span style="font-size:11px;color:var(--dimmer)">${esc(path.replace("/Users/codenolimits-dreamai-nanach","~"))}</span> ${sendBtns}
-     <button class="icon" onclick="fsSave(ED.cur)" title="Sauver (Cmd+S)">💾</button>
-     <button class="icon" onclick="ED.cm.execCommand('findPersistent')" title="Chercher (Cmd+F)">🔍</button>
-     <button class="icon" onclick="$('#fs-prev').style.display='none'">✕</button>`;
-  let t=ED.tabs.find(x=>x.path===path);
-  if(!t){ t={path,name,dirty:false,doc:CodeMirror.Doc(d.text,edMode(name))}; ED.tabs.push(t); if(ED.tabs.length>8)ED.tabs.shift(); }
-  edSwitch(path);
-  setTimeout(()=>{try{ED.cm.refresh();}catch(e){}},80);
 };
+function hlCode(src,ext){
+  // UNE SEULE passe : on ne peut pas re-matcher le HTML qu'on génère (bug class=c> vécu)
+  const K={py:"def|class|import|from|return|if|elif|else|for|while|try|except|finally|with|as|lambda|None|True|False|and|or|not|in|is|pass|raise|yield|async|await|global|print",
+    js:"function|const|let|var|return|if|else|for|while|class|new|try|catch|finally|throw|typeof|instanceof|async|await|import|export|from|default|null|undefined|true|false|this",
+    sh:"if|then|else|elif|fi|for|do|done|while|case|esac|function|echo|exit|return|local|export|source"}[ext]||"";
+  const parts=[
+    "(#[^\\n]*|\\/\\/[^\\n]*)",                                   // 1 commentaire
+    "(\"\"\"[\\s\\S]*?\"\"\"|''''[\\s\\S]*?'''+"+"'|\"(?:[^\"\\\\\\n]|\\\\.)*\"|'(?:[^'\\\\\\n]|\\\\.)*'|`(?:[^`\\\\]|\\\\.)*`)",  // 2 chaîne
+    K?"\\b("+K+")\\b":"(\\u0000)",                                  // 3 mot-clé
+    "\\b(\\d+(?:\\.\\d+)?)\\b",                                 // 4 nombre
+    "([A-Za-z_][A-Za-z0-9_]*)(?=\\()"                                   // 5 fonction
+  ];
+  const RE=new RegExp(parts.join("|"),"g");
+  let out="",last=0,m;
+  while((m=RE.exec(src))!==null){
+    out+=esc(src.slice(last,m.index));
+    const cls=m[1]?"c":m[2]?"s":m[3]?"k":m[4]?"n":"f";
+    out+='<span class="'+cls+'">'+esc(m[0])+'</span>';
+    last=RE.lastIndex;
+    if(m.index===RE.lastIndex)RE.lastIndex++;      // garde anti-boucle
+  }
+  out+=esc(src.slice(last));
+  return out+"\n";
+}
 window.fsSave=async function(path){
-  path=path||ED.cur; if(!path||!ED.cm)return;
-  const r=await api("/api/fs/write",POST({path,content:ED.cm.getValue()}));
-  if(r.ok){const t=ED.tabs.find(x=>x.path===path);if(t){t.dirty=false;edRenderTabs();}
-    toast("💾 "+path.split("/").pop()+" sauvé ("+r.size+" o)");}
-  else toast(r.reason||"échec");
+  const r=await api("/api/fs/write",POST({path,content:$("#fs-ta").value}));
+  toast(r.ok?"💾 sauvé ("+r.size+" o) — backup .bak-wall":(r.reason||"échec"));
 };
 window.fsSend=async function(which,path){
   const t=which==="term"?fsState.term:fsState.agent;
@@ -1238,63 +1192,6 @@ if("serviceWorker" in navigator){navigator.serviceWorker.register(qk("sw.js")).c
 })();
 
 document.addEventListener("visibilitychange",()=>{if(!document.hidden){load();refreshWS();}});
-/* ---- Palette de fichiers (Cmd/Ctrl+P) ---- */
-let PAL={items:[],sel:0,timer:null};
-window.palOpen=function(){$("#palette").classList.add("show");const i=$("#pal-in");i.value="";$("#pal-res").innerHTML="";i.focus();};
-window.palClose=function(){$("#palette").classList.remove("show");};
-function palRender(){
-  $("#pal-res").innerHTML=PAL.items.map((f,i)=>`<div class="r ${i===PAL.sel?"sel":""}" data-i="${i}">
-    <b>${esc(f.split("/").pop())}</b><small>${esc(f.replace("/Users/codenolimits-dreamai-nanach","~"))}</small></div>`).join("")
-    ||'<div class="r" style="color:var(--dimmer)">aucun résultat</div>';
-  $("#pal-res").querySelectorAll(".r[data-i]").forEach(d=>d.onclick=()=>palPick(+d.dataset.i));
-}
-function palPick(i){const f=PAL.items[i];if(!f)return;palClose();fsOpen(f);}
-$("#pal-in").oninput=e=>{clearTimeout(PAL.timer);const q=e.target.value.trim();
-  if(q.length<2){PAL.items=[];palRender();return;}
-  PAL.timer=setTimeout(async()=>{
-    const root=fsState.path||"";
-    const d=await api("/api/fs/find?q="+encodeURIComponent(q)+"&root="+encodeURIComponent(root));
-    PAL.items=d.files||[];PAL.sel=0;palRender();},220);};
-$("#pal-in").onkeydown=e=>{
-  if(e.key==="Escape")palClose();
-  else if(e.key==="ArrowDown"){PAL.sel=Math.min(PAL.sel+1,PAL.items.length-1);palRender();e.preventDefault();}
-  else if(e.key==="ArrowUp"){PAL.sel=Math.max(PAL.sel-1,0);palRender();e.preventDefault();}
-  else if(e.key==="Enter")palPick(PAL.sel);};
-$("#palette").onclick=e=>{if(e.target.id==="palette")palClose();};
-document.addEventListener("keydown",e=>{
-  if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==="p"&&fsState.on){e.preventDefault();palOpen();}
-  if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==="s"&&ED.cur){e.preventDefault();fsSave(ED.cur);}});
-
-/* ---- Panneau Git ---- */
-window.gitOpen=async function(){
-  const el=$("#gitpanel");el.classList.add("show");
-  el.innerHTML='<div class="st-h">⎇ Git<button class="icon" onclick="gitOpen()">↻</button><button class="icon" onclick="$(\'#gitpanel\').classList.remove(\'show\')">✕</button></div><div class="st-body">chargement…</div>';
-  const cwd=fsState.path||"";
-  const d=await api("/api/git/status?cwd="+encodeURIComponent(cwd));
-  if(!d.repo){el.querySelector(".st-body").innerHTML='<div style="padding:14px;color:var(--dim);font-size:12.5px">Ce dossier n\'est pas un dépôt git.<br><span style="color:var(--dimmer);font-size:11px">Navigue dans un projet puis rouvre ⎇.</span></div>';return;}
-  el.innerHTML=`<div class="st-h">⎇ ${esc((d.branch||"").split("...")[0])}<button class="icon" onclick="gitOpen()">↻</button><button class="icon" onclick="$('#gitpanel').classList.remove('show')">✕</button></div>
-    <div class="st-body" id="git-files" style="flex:0 0 auto;max-height:38%"></div>
-    <pre class="gdiff" id="git-diff">Touche un fichier pour voir ses modifications.</pre>
-    <div class="writerow" style="padding:6px"><input id="git-msg" placeholder="message de commit…"><button class="icon" onclick="gitCommit()">✔︎</button></div>`;
-  $("#git-files").innerHTML=d.files.length
-    ? d.files.map(f=>`<div class="gf" data-f="${esc(f.f)}"><span class="gx">${esc(f.x||" ")}</span>${esc(f.f)}</div>`).join("")
-    : '<div style="padding:12px;color:var(--dim);font-size:12px">✓ rien à committer, tout est propre</div>';
-  $("#git-files").querySelectorAll(".gf").forEach(x=>x.onclick=()=>gitDiff(d.root,x.dataset.f));
-  window._gitroot=d.root;
-};
-window.gitDiff=async function(root,f){
-  const d=await api("/api/git/diff?cwd="+encodeURIComponent(root)+"&f="+encodeURIComponent(f));
-  const html=(d.diff||"(aucune différence — fichier nouveau ou binaire)").split("\n").slice(0,700).map(l=>{
-    const c=l.startsWith("+")&&!l.startsWith("+++")?"a":l.startsWith("-")&&!l.startsWith("---")?"d":l.startsWith("@@")?"h":"";
-    return c?`<span class="${c}">${esc(l)}</span>`:esc(l);}).join("\n");
-  $("#git-diff").innerHTML=html;
-};
-window.gitCommit=async function(){
-  const msg=($("#git-msg").value||"").trim();if(!msg){toast("Message requis");return;}
-  const r=await api("/api/git/commit",POST({cwd:window._gitroot,message:msg}));
-  toast(r.ok?"✔︎ commité":"échec: "+(r.out||"").slice(0,60));if(r.ok)gitOpen();
-};
-
 load();setInterval(load,4000);
 </script>
 </body>
