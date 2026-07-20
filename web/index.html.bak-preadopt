@@ -490,13 +490,8 @@ function render(){
     }else{
       const wins=(s.wins||[]).map(w=>`<span class="chip">✓ ${esc(w).slice(0,58)}</span>`).join("");
       const blk=(s.blockers||[]).map(w=>`<span class="chip blk">⚠ ${esc(w).slice(0,58)}</span>`).join("");
-      const st=s.state||"camera";
-      const note = st==="archived"
-        ? `<div class="camnote" style="color:#8a93a8">📦 <b>Session terminée</b> — archive consultable (le programme n'existe plus).</div>
-           <button class="primary" style="margin-top:6px;padding:7px 12px;font-size:12px" data-act="resume">＋ Reprendre ce travail ici</button>`
-        : `<div class="camnote">🖥️ <b>Fenêtre Terminal</b> — lecture seule : y écrire volerait ton focus (règle n°1).</div>
-           <button class="primary" style="margin-top:6px;padding:7px 12px;font-size:12px" data-act="resume">＋ Ouvrir un terminal pilotable ici</button>`;
-      body=`<div class="goal">${esc(s.goal)||"—"}</div><div>${wins}${blk}</div>${note}`;
+      body=`<div class="goal">${esc(s.goal)||"—"}</div><div>${wins}${blk}</div>
+        <div class="camnote">🎥 caméra (lecture seule) · clic droit / 👁 pour agrandir</div>`;
     }
     let foot;
     const acts=`<button class="icon actg" data-act="feat" title="🟢 ajouter une feature (sous-session)">🟢</button><button class="icon actr" data-act="trbl" title="🔴 troubleshoot (sous-session)">🔴</button><button class="icon acty" data-act="vrfy" title="🟡 vérif Fable 5 + injection contexte">🟡</button><button class="icon" data-act="bridge" title="📁 dossier bridge (logs)">📁</button>`;
@@ -514,7 +509,7 @@ function render(){
     }
     t.innerHTML=`<div class="thead"><span class="${led}"></span>
         <span class="ttl">${esc(s.title)}</span>${s.task?`<span class="tsk">▸ ${esc(s.task)}</span>`:""}
-        ${managed?'<span class="tag mgd">'+(s.adopted_pane?'pilotable':'géré')+'</span>':'<span class="tag cam">'+(s.state==='archived'?'📦 archive':esc(s.model))+'</span>'}${s.cat&&s.cat!=='divers'?'<span class="tag" style="opacity:.7">'+({prospection:'💰',clients:'👥',sites:'🌐',creatif:'🎨',infra:'⚙️'}[s.cat]||'')+'</span>':''}
+        ${managed?'<span class="tag mgd">géré</span>':'<span class="tag cam">'+esc(s.model)+'</span>'}${s.cat&&s.cat!=='divers'?'<span class="tag" style="opacity:.7">'+({prospection:'💰',clients:'👥',sites:'🌐',creatif:'🎨',infra:'⚙️'}[s.cat]||'')+'</span>':''}
         ${clients}${s.sug?`<button class="icon sug${s.sug_age_s>5400?" stale":""}" data-act="sug"
           title="${s.sug} suggestion(s) du superviseur · ${fmtAge(s.sug_age_s||0)}">💡${s.sug}</button>`:""}
         <span class="tid mono">${esc(s.id).slice(0,12)}</span></div>
@@ -529,7 +524,6 @@ function render(){
     b("kill",async()=>{if(confirm("Fermer "+s.id+" ?")){await api("/api/kill",POST({target:s.id}));load();}});
     b("loop",()=>toggleLoop(s));
     b("manage",()=>openNew(s.project.replace(/[^a-zA-Z0-9_-]/g,"")||"proj",s.cwd));
-    b("resume",()=>openNew((s.title||s.project).replace(/[^a-zA-Z0-9_-]/g,"").slice(0,14)||"reprise",s.cwd));
     b("send",()=>{const i=t.querySelector("[data-write]");doInject(s.id,i);});
     b("feat",()=>subsession(s,"feature"));
     b("trbl",()=>subsession(s,"troubleshoot"));

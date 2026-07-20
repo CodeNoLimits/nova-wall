@@ -629,40 +629,6 @@ def consolidation_run(cat):
     _cache["t"] = 0
     return {"ok": tname is not None, "tmux": tname, "count": len(plan), "prompt": d + "/PROMPT.md"}
 
-# ------- ADOPTION : sessions externes qui tournent DÉJÀ dans un pane tmux -------
-# Une session lancée hors tmux ne peut pas recevoir de frappe sans voler le focus macOS.
-# MAIS beaucoup tournent en réalité dans un pane tmux (grok-*, claude-24-7, panes d'autres
-# outils). On les rend pilotables quand le rapprochement est SANS AMBIGUÏTÉ :
-#   1 pane tmux dont le dossier == dossier de la session, et 1 seule session live sur ce dossier.
-_adopt = {"t": 0, "map": {}}
-
-def _panes_info():
-    r = sh(["tmux", "list-panes", "-a", "-F", "#{session_name}|#{pane_pid}|#{pane_current_path}|#{pane_current_command}"])
-    out = []
-    for l in r.stdout.splitlines():
-        f = l.split("|")
-        if len(f) >= 4:
-            out.append({"name": f[0], "pid": f[1], "path": f[2], "cmd": f[3]})
-    return out
-
-def adopt_map(live_sessions):
-    """{session_id: pane_name} pour les rapprochements certains (cache 20 s)."""
-    now = time.time()
-    if now - _adopt["t"] < 20: return _adopt["map"]
-    panes = [p for p in _panes_info() if not p["name"].startswith("nova-")]
-    by_path = {}
-    for p in panes: by_path.setdefault(os.path.realpath(p["path"]), []).append(p)
-    sess_by_cwd = {}
-    for s in live_sessions:
-        if s.get("cwd"): sess_by_cwd.setdefault(os.path.realpath(s["cwd"]), []).append(s)
-    m = {}
-    for path, ps in by_path.items():
-        ss = sess_by_cwd.get(path, [])
-        if len(ps) == 1 and len(ss) == 1:          # 1 pane ↔ 1 session = certain
-            m[ss[0]["id"]] = ps[0]["name"]
-    _adopt["map"] = m; _adopt["t"] = now
-    return m
-
 # ------- sessions view --------------------------------------------------------
 def build_sessions():
     with _lock:
@@ -711,40 +677,6 @@ def build_sessions():
             "loop": tname in LOOPS, "loop_info": ({"text": LOOPS[tname]["text"][:60],
                     "interval": LOOPS[tname]["interval"], "count": LOOPS[tname]["count"]} if tname in LOOPS else None),
         })
-    # --- TERMINAUX TMUX ORPHELINS : panes vivants que le mur ignorait (grok-*, claude-24-7, autres outils)
-    known = {x["id"] for x in out} | set(managed.keys())
-    for p in _panes_info():
-        nm = p["name"]
-        if nm in known or nm.startswith("nova-"): continue
-        cap = tmux_capture(nm, 44, ansi=True)
-        proj = os.path.basename(p["path"].rstrip("/")) or "~"
-        engine = "Grok" if "grok" in p["cmd"].lower() or "grok" in nm.lower() else "Terminal"
-        out.append({
-            "id": nm, "kind": "managed", "cwd": p["path"], "project": proj,
-            "title": nm.replace("grok-", "Grok · ").replace("claude-", "Claude · "),
-            "task": "", "branch": "", "goal": f"terminal tmux · {p['cmd'][:24]}",
-            "wins": [], "blockers": [], "clients": [], "urls": [], "n_msgs": 0,
-            "model": engine, "mode": "grok" if engine == "Grok" else "opus",
-            "cat": classify(nm, "", [], p["path"], proj),
-            "age_s": 0, "live": True, "tmux": nm, "capture": cap[-6000:], "dead": False,
-            "loop": nm in LOOPS, "loop_info": None, "adopted_pane": True,
-        })
-
-    # état clair : archivée (process terminé) vs caméra vivante vs pilotable
-    ARCH = 45 * 60
-    live_ext = [x for x in out if x["kind"] == "external" and x["live"]]
-    amap = adopt_map(live_ext)
-    for x in out:
-        if x["kind"] == "managed":
-            x["writable"] = True; x["state"] = "managed"
-        elif not x["live"] and x["age_s"] > ARCH:
-            x["writable"] = False; x["state"] = "archived"
-        else:
-            pane = amap.get(x["id"])
-            if pane:
-                x["tmux"] = pane; x["writable"] = True; x["state"] = "adopted"
-            else:
-                x["writable"] = False; x["state"] = "camera"
     out.sort(key=lambda x: (not x["live"], x["age_s"]))
     with _lock:
         _cache["data"] = out; _cache["t"] = time.time()
