@@ -47,6 +47,11 @@ button.primary{background:linear-gradient(180deg,#12a3bd,#0c7f96);border-color:#
 .seg button{border:0;border-radius:0;background:transparent;padding:7px 9px}
 .seg button.on{background:rgba(34,211,238,.16)}
 #stage{overflow:auto}
+#cats{display:flex;gap:6px;padding:8px 12px 0;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+#cats::-webkit-scrollbar{display:none}
+#cats button{flex:none;padding:7px 13px;border-radius:20px;font-size:12.5px;background:var(--panel2);border:1px solid var(--border2);color:var(--dim)}
+#cats button.on{background:rgba(34,211,238,.16);border-color:var(--cyan);color:#dffaff;font-weight:600}
+#cats .cnt{opacity:.65;font-size:10.5px;margin-left:4px}
 #wall{display:grid;gap:12px;padding:14px;min-height:100%;grid-template-columns:repeat(var(--cols,3),1fr);align-content:start}
 .tile{position:relative;background:linear-gradient(180deg,var(--panel),var(--panel2));
   border:1px solid var(--border);border-radius:14px;overflow:hidden;display:flex;flex-direction:column;
@@ -260,7 +265,7 @@ body.chatview #zterm{display:none}
   </div>
 </header>
 
-<div id="stage"><svg id="arrows"></svg><div id="wall"></div></div>
+<div id="stage"><div id="cats"></div><svg id="arrows"></svg><div id="wall"></div></div>
 <div id="workspace" style="display:none"></div>
 <div id="studio"><div class="st-grid">
   <div class="st-col" style="position:relative">
@@ -381,7 +386,7 @@ const _urlK=new URLSearchParams(location.search).get("k")||"";
 if(_urlK) try{localStorage.setItem("nw_k",_urlK);}catch(e){}      // 1er accès avec ?k= → mémorisé
 const K=_urlK||(()=>{try{return localStorage.getItem("nw_k")||"";}catch(e){return "";}})();  // app installée: pas de ?k= → on relit
 const qk=u=>K?(u+(u.includes("?")?"&":"?")+"k="+encodeURIComponent(K)):u;
-let S={sessions:[],modes:{},links:[],cols:3,linkMode:false,fuseMode:false,sel:[],linkFrom:null,filter:"",pending:null,chatPending:[],chatSig:"",zoomId:null,zoomTimer:null};
+let S={sessions:[],modes:{},links:[],cols:3,linkMode:false,fuseMode:false,sel:[],linkFrom:null,filter:"",pending:null,chatPending:[],chatSig:"",zoomId:null,zoomTimer:null,cat:localStorage.getItem("nw_cat")||"all",sort:localStorage.getItem("nw_sort")||"act"};
 
 function toast(m){const t=$("#toast");t.textContent=m;t.classList.add("show");clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove("show"),2800);}
 async function api(u,opt){const r=await fetch(qk(u),opt);return r.json();}
@@ -427,7 +432,22 @@ async function load(){
 }
 function modelClass(m){for(const k of ["Opus","Sonnet","Fable","Grok","GLM","Haiku"])if((m||"").includes(k))return"b-"+k;return"";}
 function fmtAge(s){if(s<60)return"à l'instant";if(s<3600)return Math.round(s/60)+"m";if(s<86400)return Math.round(s/3600)+"h";return"—";}
-function visible(){const f=S.filter.toLowerCase();return S.sessions.filter(s=>!f||(s.title+" "+s.project+" "+(s.clients||[]).join(" ")+" "+s.cwd+" "+s.model).toLowerCase().includes(f));}
+const CATL={all:"Tous",prospection:"💰 Prospection",clients:"👥 Clients",sites:"🌐 Sites",creatif:"🎨 Créatif",infra:"⚙️ Infra",divers:"📁 Divers"};
+function visible(){const f=S.filter.toLowerCase();
+  let l=S.sessions.filter(s=>!f||(s.title+" "+s.project+" "+(s.clients||[]).join(" ")+" "+s.cwd+" "+s.model).toLowerCase().includes(f));
+  if(S.cat!=="all")l=l.filter(s=>(s.cat||"divers")===S.cat);
+  if(S.sort==="name")l=[...l].sort((a,b)=>(a.title||"").localeCompare(b.title||"","fr"));
+  return l;}
+function renderCats(){
+  const counts={all:S.sessions.length};
+  for(const s of S.sessions){const c=s.cat||"divers";counts[c]=(counts[c]||0)+1;}
+  const el=$("#cats");if(!el)return;
+  el.innerHTML=Object.keys(CATL).filter(c=>c==="all"||counts[c]).map(c=>
+    `<button data-cat="${c}" class="${S.cat===c?"on":""}">${CATL[c]}<span class="cnt">${counts[c]||0}</span></button>`).join("")
+    +`<button data-sort="1" class="${S.sort==="name"?"on":""}" title="trier par nom">🔤 A-Z</button>`;
+  el.querySelectorAll("[data-cat]").forEach(b=>b.onclick=()=>{S.cat=b.dataset.cat;localStorage.setItem("nw_cat",S.cat);render();});
+  const sb=el.querySelector("[data-sort]");if(sb)sb.onclick=()=>{S.sort=S.sort==="name"?"act":"name";localStorage.setItem("nw_sort",S.sort);render();};
+}
 const modeOpts=(sel)=>Object.entries(S.modes).map(([k,v])=>`<option value="${k}" ${sel===k?"selected":""}>${v}</option>`).join("");
 
 function render(){
@@ -437,6 +457,7 @@ function render(){
     try{ if(af.closest("#wall,#studio,#workspace,#ov-zoom")){ drawArrows(); return; } }catch(e){}
   }
   document.documentElement.style.setProperty("--cols",S.cols);
+  renderCats();
   const wall=$("#wall"),list=visible();
   $("#n-live").textContent=S.sessions.filter(s=>s.live).length;
   $("#n-tot").textContent=S.sessions.length;
@@ -477,7 +498,7 @@ function render(){
     }
     t.innerHTML=`<div class="thead"><span class="${led}"></span>
         <span class="ttl">${esc(s.title)}</span>${s.task?`<span class="tsk">▸ ${esc(s.task)}</span>`:""}
-        ${managed?'<span class="tag mgd">géré</span>':'<span class="tag cam">'+esc(s.model)+'</span>'}
+        ${managed?'<span class="tag mgd">géré</span>':'<span class="tag cam">'+esc(s.model)+'</span>'}${s.cat&&s.cat!=='divers'?'<span class="tag" style="opacity:.7">'+({prospection:'💰',clients:'👥',sites:'🌐',creatif:'🎨',infra:'⚙️'}[s.cat]||'')+'</span>':''}
         ${clients}${s.sug?`<button class="icon sug${s.sug_age_s>5400?" stale":""}" data-act="sug"
           title="${s.sug} suggestion(s) du superviseur · ${fmtAge(s.sug_age_s||0)}">💡${s.sug}</button>`:""}
         <span class="tid mono">${esc(s.id).slice(0,12)}</span></div>
@@ -984,6 +1005,21 @@ async function fsGo(path){
 }
 window.fsGo=fsGo;
 window.fsOpen=async function(path){
+  const ext=(path.split(".").pop()||"").toLowerCase();
+  const IMG=["png","jpg","jpeg","gif","webp","svg"],VID=["mp4","mov","webm","m4v"],AUD=["mp3","wav","m4a"];
+  if(IMG.includes(ext)||VID.includes(ext)||AUD.includes(ext)){
+    const pv=$("#fs-prev");pv.style.display="flex";
+    const name=path.split("/").pop();const src=qk("/api/fs/raw?path="+encodeURIComponent(path));
+    const media=IMG.includes(ext)?`<img src="${src}" style="max-width:100%;max-height:100%;object-fit:contain">`
+      :VID.includes(ext)?`<video src="${src}" controls playsinline style="max-width:100%;max-height:100%"></video>`
+      :`<audio src="${src}" controls style="width:100%"></audio>`;
+    pv.innerHTML=`<div class="st-h">🖼️ ${esc(name)}
+        <button class="icon" onclick="fsSend('term','${esc(path)}')" title="envoyer au terminal">→🖥️</button>
+        <button class="icon" onclick="fsSend('agent','${esc(path)}')" title="envoyer à l'agent">→🤖</button>
+        <button class="icon" onclick="$('#fs-prev').style.display='none'">✕</button></div>
+      <div style="flex:1;display:flex;align-items:center;justify-content:center;background:#000;min-height:0;padding:8px">${media}</div>`;
+    return;
+  }
   const d=await api("/api/fs/read?path="+encodeURIComponent(path));
   const pv=$("#fs-prev");pv.style.display="flex";
   const name=path.split("/").pop();
@@ -1046,6 +1082,8 @@ document.querySelectorAll("#tabbar button").forEach(b=>b.onclick=()=>{
   else if(v==="aide"){$("#ov-help").classList.add("show");tabSel("mur");}
 });
 
+(function manifestFix(){ if(!K)return; const l=document.querySelector('link[rel="manifest"]');
+  if(l) l.href="manifest.webmanifest?k="+encodeURIComponent(K); })();
 if("serviceWorker" in navigator){navigator.serviceWorker.register(qk("sw.js")).catch(()=>{});}
 /* ---- proposition d'installation (PWA) ---- */
 (function(){

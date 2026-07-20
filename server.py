@@ -301,6 +301,21 @@ def pretty_model(m):
         if k in m: return v
     return m.split("-")[0][:8]
 
+# ------- catégories de sessions -----
+_CAT_RULES = [
+    ("prospection", ("prospect","outreach","upwork","lead","cold","salvo","campagne","mailchimp","cash","assessment","freelance","fiverr")),
+    ("clients",     ("esther","ghezi","keren","leeya","arie","ariel","mister-boole","boole","tikoun","tao","haim","pinto","michael","client")),
+    ("sites",       ("site","vercel","deploy","landing","shopify","storefront","page","web","dns","domain","seo")),
+    ("creatif",     ("film","video","vidéo","image","saba","montage","musique","suno","kling","flow","imagine","photo","studio","clip","hafatsa","petek","chanson","tts","voix")),
+    ("infra",       ("daemon","launchd","baileys","serveur","infra","nova","wall","telegram","bot","mcp","tunnel","backup","memoire","mémoire","or ","synergy","watchdog","cron")),
+]
+def classify(title, goal, clients, cwd, project):
+    hay = " ".join([str(title or ""), str(goal or "")[:200], " ".join(clients or []), str(cwd or ""), str(project or "")]).lower()
+    if clients: return "clients"
+    for cat, kws in _CAT_RULES:
+        if any(k in hay for k in kws): return cat
+    return "divers"
+
 _TITLE_STRIP = re.compile(r'^\s*=+\s*QUESTION\s*=+\s*', re.I)
 def make_title(goal, clients, project):
     """Un titre humain court et clair, dérivé du but."""
@@ -559,6 +574,43 @@ def read_suggestions(sid):
     _sug_cache[sid] = {"mtime": st.st_mtime, "data": d}
     return d
 
+# ------- consolidateur de sessions dormantes ----------------------------------
+def consolidation_plan():
+    ss = build_sessions()
+    plan = {}
+    for s in ss:
+        if s["kind"] != "external": continue
+        if s["live"]: continue                      # on ne touche pas aux actives
+        blk = s.get("blockers") or []
+        if not blk: continue
+        cat = s.get("cat", "divers")
+        plan.setdefault(cat, []).append({"id": s["id"], "title": s["title"],
+                                         "age_min": round(s["age_s"]/60), "blockers": blk[:3]})
+    out = {"generated": time.strftime("%Y-%m-%d %H:%M"), "cats": plan,
+           "totals": {c: len(v) for c, v in plan.items()}}
+    jsave(os.path.join(STATE, "consolidation_plan.json"), out)
+    return out
+
+def consolidation_run(cat):
+    plan = consolidation_plan().get("cats", {}).get(cat)
+    if not plan: return {"ok": False, "reason": f"aucune session dormante à blocages en « {cat} »"}
+    name = f"reprise-{cat}"
+    if f"nova-{name}" in tmux_ls(): return {"ok": False, "reason": f"nova-{name} existe déjà"}
+    d = os.path.join(BRIDGES, f"reprise-{cat}"); os.makedirs(d, exist_ok=True)
+    with open(os.path.join(d, "PROMPT.md"), "w") as f:
+        f.write(f"# REPRISE {cat.upper()} — problèmes non réglés (consolidés par NOVA WALL)\n\n"
+                f"Tu es la session de REPRISE de la catégorie {cat}. Voici les blocages laissés par des "
+                f"sessions dormantes. Traite-les UN PAR UN (prouve chaque fix), sans rien casser, "
+                f"rien de sacré, aucun envoi client sans GO.\n\n")
+        for it in plan:
+            f.write(f"## {it['title']} ({it['id']}, dormante depuis {it['age_min']} min)\n")
+            for b in it["blockers"]: f.write(f"- ⚠️ {b}\n")
+            f.write("\n")
+    tname, status = tmux_spawn(name, "opus-dngrok", HOME,
+                               initial=f"Lis et exécute {d}/PROMPT.md")
+    _cache["t"] = 0
+    return {"ok": tname is not None, "tmux": tname, "count": len(plan), "prompt": d + "/PROMPT.md"}
+
 # ------- sessions view --------------------------------------------------------
 def build_sessions():
     with _lock:
@@ -588,6 +640,7 @@ def build_sessions():
             "clients": s.get("clients", []), "urls": s.get("urls", [])[:3],
             "n_msgs": s.get("n_msgs", 0), "model": pretty_model(meta["model"]),
             "age_s": round(age), "live": age < LIVE_SEC, "tmux": None, "loop": False,
+            "cat": classify(gt.get("t") or "", s.get("goal"), s.get("clients", []), s.get("cwd",""), proj),
         })
     for tname, info in managed.items():
         alive = tname in live_tmux
@@ -602,6 +655,7 @@ def build_sessions():
             "model": MODES.get(mode, {}).get("label", "?"), "mode": mode,
             "age_s": 0 if alive else 9e9, "live": alive, "tmux": tname,
             "capture": cap[-6000:], "dead": not alive,
+            "cat": classify(info.get("name",""), "", [], info.get("cwd",""), ""),
             "loop": tname in LOOPS, "loop_info": ({"text": LOOPS[tname]["text"][:60],
                     "interval": LOOPS[tname]["interval"], "count": LOOPS[tname]["count"]} if tname in LOOPS else None),
         })
@@ -738,7 +792,18 @@ class H(BaseHTTPRequestHandler):
                     return self._send(200, f.read(), "text/html; charset=utf-8")
             except Exception as e:
                 return self._send(500, f"index missing: {e}", "text/plain")
-        if p.lstrip("/") in ("manifest.webmanifest", "sw.js", "icon-192.png", "icon-512.png", "icon-180.png"):
+        if p.lstrip("/") == "manifest.webmanifest":
+            k = parse_qs(u.query).get("k", [""])[0]
+            start = "./?k=" + k if (TOKEN and k == TOKEN) else "./"
+            man = {"name": "NOVA WALL — Command Center", "short_name": "NOVA WALL",
+                   "description": "Mission control pour tes sessions IA.",
+                   "start_url": start, "scope": "./", "display": "standalone", "orientation": "any",
+                   "background_color": "#06080d", "theme_color": "#06080d",
+                   "icons": [{"src": "icon-192.png", "sizes": "192x192", "type": "image/png"},
+                             {"src": "icon-512.png", "sizes": "512x512", "type": "image/png"},
+                             {"src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}]}
+            return self._send(200, man, "application/manifest+json")
+        if p.lstrip("/") in ("sw.js", "icon-192.png", "icon-512.png", "icon-180.png"):
             fp = os.path.join(WEB, p.lstrip("/"))
             if os.path.exists(fp):
                 ct = ("application/manifest+json" if fp.endswith("webmanifest")
@@ -828,6 +893,20 @@ class H(BaseHTTPRequestHandler):
                 return self._send(403, {"error": "permission refusée"})
             return self._send(200, {"path": rp, "parent": os.path.dirname(rp) if rp != "/" else "/",
                                     "dirs": dirs[:400], "files": files[:400]})
+        if p == "/api/fs/raw":
+            path = parse_qs(u.query).get("path", [""])[0]
+            rp = os.path.realpath(os.path.expanduser(path))
+            if not _fs_ok(rp): return self._send(403, {"error": "hors zone"})
+            if not os.path.isfile(rp): return self._send(404, {"error": "introuvable"})
+            ext = os.path.splitext(rp)[1].lower()
+            MIME = {".png":"image/png",".jpg":"image/jpeg",".jpeg":"image/jpeg",".gif":"image/gif",
+                    ".webp":"image/webp",".svg":"image/svg+xml",".mp4":"video/mp4",".mov":"video/quicktime",
+                    ".webm":"video/webm",".m4v":"video/mp4",".mp3":"audio/mpeg",".wav":"audio/wav",
+                    ".m4a":"audio/mp4",".pdf":"application/pdf"}
+            ct = MIME.get(ext)
+            if not ct: return self._send(415, {"error": "type non previsualisable"})
+            if os.path.getsize(rp) > 200_000_000: return self._send(413, {"error": "trop gros"})
+            with open(rp, "rb") as f: return self._send(200, f.read(), ct)
         if p == "/api/fs/read":
             path = parse_qs(u.query).get("path", [""])[0]
             rp = os.path.realpath(os.path.expanduser(path))
@@ -838,6 +917,8 @@ class H(BaseHTTPRequestHandler):
             raw = open(rp, "rb").read()
             try: return self._send(200, {"path": rp, "size": sz, "text": raw.decode("utf-8")})
             except Exception: return self._send(200, {"path": rp, "binary": True, "size": sz})
+        if p == "/api/consolidate/plan":
+            return self._send(200, consolidation_plan())
         if p == "/api/graph":
             ss = build_sessions()
             nodes = [{"id": s["id"], "title": s["title"], "live": s["live"], "kind": s["kind"],
@@ -939,6 +1020,8 @@ class H(BaseHTTPRequestHandler):
             if target not in tmux_ls(): return self._send(200, {"ok": False, "reason": "terminal non géré"})
             msg = d.get("note") or f"Prends en compte ce fichier : {rp} — lis-le et intègre-le à ton travail en cours."
             return self._send(200, {"ok": tmux_send(target, msg), "path": rp})
+        if p == "/api/consolidate/run":
+            return self._send(200, consolidation_run(d.get("cat", "")))
         if p == "/api/subsession":
             return self._send(200, make_subsession(d.get("parent", ""), d.get("kind", "feature")))
         if p == "/api/bridge":
