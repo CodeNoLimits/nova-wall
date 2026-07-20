@@ -40,3 +40,10 @@ Lecture seule sur les sessions externes (caméra) ; seules les sessions gérées
 Terminal embarqué live (xterm.js) · aperçus-écran optionnels · alertes DAVID_ACTION_REQUIRED clignotantes ·
 détection de collision same-dossier · snapshot du mur · pilotage vocal via Nova Command · app macOS signée.
 Vision + commercialisation : `PLAN_1000_MOTS.md`.
+
+## 🏷️ Produit (vision commerciale)
+NOVA WALL = **mission control pour flottes d'agents IA** (Claude Code, Grok, tout CLI) : mur de caméras
+live, injection/bridge/fusion entre sessions, sous-sessions assignées, mode Écrans (Chrome embarqué),
+Studio façon Cursor (fichiers·terminal·agent), graphe de connaissances, contrôle à distance total
+(tunnel + token). Cible : studios/agences qui font tourner 10-50 agents. Distribution : repo privé
+`CodeNoLimits/nova-wall` → reskin/bundle vendable ou hook open-source vers nos services DreamNova.

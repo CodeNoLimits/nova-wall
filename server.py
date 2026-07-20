@@ -8,6 +8,8 @@ Stdlib only. Anti-vol-de-focus (tmux send-keys = tape DANS le pty, jamais au niv
 """
 import os, re, json, time, glob, subprocess, threading, urllib.request
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
+# launchd donne un PATH minimal → tmux (homebrew) et dn-grok deviendraient introuvables
+os.environ["PATH"] = "/opt/homebrew/bin:/usr/local/bin:" + os.environ.get("PATH", "/usr/bin:/bin")
 from urllib.parse import urlparse, parse_qs
 
 HOME     = os.path.expanduser("~")
@@ -38,6 +40,9 @@ MODES = {
 
 _cache = {"t": 0, "data": None}
 _lock  = threading.Lock()
+_FS_ROOTS = [os.path.realpath(HOME), "/tmp", "/private/tmp"]
+def _fs_ok(rp):
+    return any(rp == r or rp.startswith(r + "/") for r in _FS_ROOTS)
 LOOPS  = {}   # target -> {"stop": Event, "text": str, "interval": int, "count": int, "thread": Thread}
 
 # ------- helpers --------------------------------------------------------------
@@ -255,6 +260,58 @@ def make_subsession(parent, kind):
     _cache["t"] = 0
     return {"ok": tname is not None, "tmux": tname, "bridge": bridge, "kind": kind, "mode": mode, "status": status}
 
+# ------- titres générés (dn-grok 0$, batch, cache) ----------------------------
+TITLES_F = os.path.join(STATE, "titles.json")
+DN_GROK  = os.path.join(HOME, "etz-chaim", "bin", "dn-grok")
+
+def _title_worker():
+    time.sleep(8)
+    while True:
+        try:
+            titles = jload(TITLES_F, {})
+            now = time.time()
+            todo = []
+            for s in build_sessions():
+                if s["kind"] != "external" or not s["live"]: continue
+                tt = titles.get(s["id"], {})
+                if now - tt.get("ts", 0) < 1800: continue          # frais 30 min
+                tail = ""
+                try:
+                    files = glob.glob(os.path.join(PROJECTS, "**", f"{s['id']}*.jsonl"), recursive=True)
+                    if files:
+                        t = tail_bytes(files[0], 30000)
+                        for line in reversed(t.splitlines()):
+                            try:
+                                o = json.loads(line); m = o.get("message", {})
+                                if isinstance(m, dict) and m.get("role") == "assistant":
+                                    c = m.get("content")
+                                    if isinstance(c, list):
+                                        tx = " ".join(b.get("text", "") for b in c if isinstance(b, dict) and b.get("type") == "text")
+                                        if tx.strip(): tail = tx.strip()[:250]; break
+                            except Exception: continue
+                except Exception: pass
+                todo.append({"id": s["id"], "goal": (s["goal"] or "")[:250], "now": tail})
+            if todo:
+                todo = todo[:20]
+                prompt = ("Voici des sessions de travail IA. Pour CHACUNE donne un titre CLAIR (3-6 mots, français, "
+                          "qui définit exactement la session) et la tâche EN COURS (4-8 mots, déduite du dernier message). "
+                          "Réponds UNIQUEMENT en JSON strict: {\"<id>\": {\"t\": \"titre\", \"k\": \"tâche en cours\"}}\n\n"
+                          + json.dumps(todo, ensure_ascii=False))
+                r = sh([DN_GROK, prompt], timeout=150)
+                m = re.search(r"\{.*\}", r.stdout, re.S)
+                if m:
+                    try:
+                        gen = json.loads(m.group(0))
+                        for sid, v in gen.items():
+                            if isinstance(v, dict) and v.get("t"):
+                                titles[sid] = {"t": str(v.get("t"))[:60], "k": str(v.get("k", ""))[:70], "ts": now}
+                        jsave(TITLES_F, titles); _cache["t"] = 0
+                    except Exception: pass
+        except Exception: pass
+        time.sleep(360)
+
+threading.Thread(target=_title_worker, daemon=True).start()
+
 # ------- sessions view --------------------------------------------------------
 def build_sessions():
     with _lock:
@@ -262,6 +319,7 @@ def build_sessions():
             return _cache["data"]
     syn = jload(SYNERGY, {"sessions": []})
     managed = jload(MANAGED_F, {})
+    gen_titles = jload(TITLES_F, {})
     live_tmux = set(tmux_ls())
     out = []
     for s in syn.get("sessions", []):
@@ -269,10 +327,13 @@ def build_sessions():
         meta = live_meta(jsonl) if jsonl else {"model": None, "age_s": 9e9}
         age = meta["age_s"] if meta["age_s"] is not None else s.get("age_min", 9e9) * 60
         proj = os.path.basename(s.get("cwd", "").rstrip("/")) or "~"
+        sid = s.get("session", "")[:8]
+        gt = gen_titles.get(sid, {})
         out.append({
-            "id": s.get("session", "")[:8], "kind": "external",
+            "id": sid, "kind": "external",
             "cwd": s.get("cwd", ""), "project": proj,
-            "title": make_title(s.get("goal"), s.get("clients", []), proj),
+            "title": gt.get("t") or make_title(s.get("goal"), s.get("clients", []), proj),
+            "task": gt.get("k", ""),
             "branch": s.get("branch", ""), "goal": (s.get("goal") or "").strip()[:260],
             "wins": s.get("wins", [])[:3], "blockers": s.get("blockers", [])[:3],
             "clients": s.get("clients", []), "urls": s.get("urls", [])[:3],
@@ -354,6 +415,34 @@ class H(BaseHTTPRequestHandler):
             return self._send(404, {"error": "not found"})
         if p == "/api/links":
             return self._send(200, jload(LINKS_F, {"edges": []}))
+        if p == "/api/fs/list":
+            path = parse_qs(u.query).get("path", [HOME])[0] or HOME
+            rp = os.path.realpath(os.path.expanduser(path))
+            if not _fs_ok(rp): return self._send(403, {"error": "hors zone autorisée"})
+            if not os.path.isdir(rp): return self._send(404, {"error": "pas un dossier"})
+            dirs, files = [], []
+            try:
+                for e in sorted(os.listdir(rp)):
+                    if e.startswith(".") and e not in (".claude", ".grok"): continue
+                    fp = os.path.join(rp, e)
+                    try:
+                        if os.path.isdir(fp): dirs.append(e)
+                        else: files.append({"n": e, "s": os.path.getsize(fp)})
+                    except Exception: pass
+            except PermissionError:
+                return self._send(403, {"error": "permission refusée"})
+            return self._send(200, {"path": rp, "parent": os.path.dirname(rp) if rp != "/" else "/",
+                                    "dirs": dirs[:400], "files": files[:400]})
+        if p == "/api/fs/read":
+            path = parse_qs(u.query).get("path", [""])[0]
+            rp = os.path.realpath(os.path.expanduser(path))
+            if not _fs_ok(rp): return self._send(403, {"error": "hors zone"})
+            if not os.path.isfile(rp): return self._send(404, {"error": "introuvable"})
+            sz = os.path.getsize(rp)
+            if sz > 400_000: return self._send(200, {"path": rp, "big": True, "size": sz})
+            raw = open(rp, "rb").read()
+            try: return self._send(200, {"path": rp, "size": sz, "text": raw.decode("utf-8")})
+            except Exception: return self._send(200, {"path": rp, "binary": True, "size": sz})
         if p == "/api/graph":
             ss = build_sessions()
             nodes = [{"id": s["id"], "title": s["title"], "live": s["live"], "kind": s["kind"],
@@ -432,6 +521,23 @@ class H(BaseHTTPRequestHandler):
         if p == "/api/loop/stop":
             loop_stop(d.get("target", "")); _cache["t"] = 0
             return self._send(200, {"ok": True})
+        if p == "/api/fs/write":
+            rp = os.path.realpath(os.path.expanduser(d.get("path", "")))
+            if not _fs_ok(rp): return self._send(403, {"error": "hors zone"})
+            try:
+                if os.path.exists(rp):  # backup 1 niveau avant écrasement
+                    os.replace(rp, rp + ".bak-wall") if not os.path.exists(rp + ".bak-wall") else None
+                with open(rp, "w") as f: f.write(d.get("content", ""))
+                return self._send(200, {"ok": True, "size": os.path.getsize(rp)})
+            except Exception as e:
+                return self._send(200, {"ok": False, "reason": str(e)[:120]})
+        if p == "/api/fs/send":
+            rp = os.path.realpath(os.path.expanduser(d.get("path", "")))
+            target = d.get("target", "")
+            if not _fs_ok(rp): return self._send(403, {"error": "hors zone"})
+            if target not in tmux_ls(): return self._send(200, {"ok": False, "reason": "terminal non géré"})
+            msg = d.get("note") or f"Prends en compte ce fichier : {rp} — lis-le et intègre-le à ton travail en cours."
+            return self._send(200, {"ok": tmux_send(target, msg), "path": rp})
         if p == "/api/subsession":
             return self._send(200, make_subsession(d.get("parent", ""), d.get("kind", "feature")))
         if p == "/api/bridge":

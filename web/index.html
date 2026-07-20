@@ -19,7 +19,7 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);
   -webkit-font-smoothing:antialiased;overflow:hidden}
 body{display:flex;flex-direction:column}
 header{flex:none}
-#stage,#workspace,#graphview{position:relative;flex:1;min-height:0;inset:auto!important}
+#stage,#workspace,#graphview,#studio{position:relative;flex:1;min-height:0;inset:auto!important}
 body{background:
   radial-gradient(1200px 600px at 80% -10%, rgba(34,211,238,.06), transparent 60%),
   radial-gradient(900px 500px at 10% 110%, rgba(167,139,250,.05), transparent 60%),
@@ -56,7 +56,8 @@ button.primary{background:linear-gradient(180deg,#12a3bd,#0c7f96);border-color:#
 .led{width:8px;height:8px;border-radius:50%;background:var(--dimmer);flex:none}
 .led.live{background:var(--green);box-shadow:0 0 8px var(--green);animation:pulse 1.8s infinite}
 .led.hot{background:var(--amber);box-shadow:0 0 8px var(--amber)}
-.ttl{font-size:13px;font-weight:700;color:#eaf1ff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:40px}
+.ttl{font-size:13px;font-weight:700;color:#eaf1ff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:0 1 auto;min-width:40px}
+.tsk{font-size:11px;color:var(--cyan);opacity:.75;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1 2 auto;min-width:0}
 .tid{font-size:10.5px;color:var(--dimmer)}
 .tag{font-size:10px;padding:2px 6px;border-radius:20px;border:1px solid var(--border2);color:var(--dim);white-space:nowrap}
 .tag.mgd{color:#bff3fb;border-color:#1f6b7a;background:rgba(34,211,238,.1)}
@@ -119,6 +120,20 @@ body.listmode .goal{max-height:40px}
   max-height:48vh;overflow:auto;white-space:pre-wrap;color:#8affc0}
 /* ---- mode Écrans (workspace) ---- */
 #workspace{display:flex;flex-direction:column;overflow:hidden}
+#studio{display:none;overflow:hidden}
+.st-grid{display:grid;grid-template-columns:300px 1fr 1fr;gap:8px;padding:8px;height:100%;box-sizing:border-box;min-height:0}
+.st-col{background:var(--panel);border:1px solid var(--border2);border-radius:12px;display:flex;flex-direction:column;min-height:0;overflow:hidden}
+.st-h{display:flex;align-items:center;gap:7px;padding:7px 10px;border-bottom:1px solid var(--border);background:rgba(0,0,0,.28);font-size:12px;font-weight:700;flex-wrap:wrap}
+.st-h select{flex:1;min-width:90px;padding:4px 6px;font-size:11px}
+.st-body{flex:1;overflow:auto;min-height:0;padding:6px}
+.fs-crumb{font-size:11px;color:var(--dim);padding:4px 6px;word-break:break-all;cursor:pointer}
+.fs-it{display:flex;gap:8px;align-items:center;padding:7px 9px;border-radius:8px;cursor:pointer;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fs-it:hover{background:rgba(34,211,238,.09)}
+.fs-it .sz{margin-left:auto;font-size:10px;color:var(--dimmer)}
+.fs-prev{position:absolute;inset:0;background:var(--panel);display:flex;flex-direction:column;z-index:5}
+.fs-prev textarea{flex:1;background:#03060a;color:#c9d6ee;border:0;padding:10px;font:11.5px "SF Mono",Menlo,monospace;resize:none;outline:none;min-height:0}
+.st-col pre.cam{flex:1;max-height:none;margin:6px;min-height:0;overflow:auto}
+@media (max-width:900px){.st-grid{grid-template-columns:1fr;grid-auto-rows:minmax(240px,1fr);overflow:auto}}
 #graphview{display:none;overflow:hidden}
 #gcanvas{width:100%;height:100%;display:block;touch-action:none;cursor:grab}
 .glegend{position:absolute;top:10px;left:12px;font-size:11px;color:var(--dim);background:rgba(8,12,22,.8);padding:8px 12px;border-radius:10px;border:1px solid var(--border);line-height:1.7;pointer-events:none}
@@ -172,6 +187,7 @@ body.listmode .goal{max-height:40px}
     <button id="btn-fuse" title="Fusionner 2 sessions">⧉ Fusion</button>
     <button id="btn-screens" title="Mode Écrans (4-up + pages + Chrome embarqué)">🖥️ Écrans</button>
     <button id="btn-graph" title="Graphe de connaissances">🕸️</button>
+    <button id="btn-studio" title="Studio (fichiers · terminal · agent — façon Cursor)">🗂️ Studio</button>
     <button id="btn-help" title="Comment ça marche">❓</button>
     <button id="btn-new" class="primary">＋ Terminal</button>
     <button id="btn-pop" title="2ᵉ écran">⧉⧉</button>
@@ -180,6 +196,26 @@ body.listmode .goal{max-height:40px}
 
 <div id="stage"><svg id="arrows"></svg><div id="wall"></div></div>
 <div id="workspace" style="display:none"></div>
+<div id="studio"><div class="st-grid">
+  <div class="st-col" style="position:relative">
+    <div class="st-h">🗂️ Fichiers<button class="icon" onclick="fsGo(fsState.path)" title="rafraîchir">↻</button></div>
+    <div class="fs-crumb" id="fs-crumb"></div>
+    <div class="st-body" id="fs-list"></div>
+    <div class="fs-prev" id="fs-prev" style="display:none"></div>
+  </div>
+  <div class="st-col">
+    <div class="st-h">🖥️ Terminal <select id="st-term" onchange="stPick('term',this.value)"></select>
+      <button class="icon" onclick="stSpawn('term')" title="nouveau">＋</button></div>
+    <pre class="cam" id="st-term-cam">(choisis ou crée un terminal)</pre>
+    <div class="writerow" style="padding:6px"><input id="st-term-in" placeholder="écrire… (Entrée)"><button class="icon" onclick="stSend('term')">➤</button></div>
+  </div>
+  <div class="st-col">
+    <div class="st-h">🤖 Agent <select id="st-agent" onchange="stPick('agent',this.value)"></select>
+      <button class="icon" onclick="stSpawn('agent')" title="nouveau">＋</button></div>
+    <pre class="cam" id="st-agent-cam">(choisis ou crée un agent — Claude/Grok/Fable)</pre>
+    <div class="writerow" style="padding:6px"><input id="st-agent-in" placeholder="parler à l'agent… (Entrée)"><button class="icon" onclick="stSend('agent')">➤</button></div>
+  </div>
+</div></div>
 <div id="graphview">
   <canvas id="gcanvas"></canvas>
   <div class="glegend">
@@ -328,7 +364,7 @@ function render(){
         ${acts}<span class="age mono">${fmtAge(s.age_s)}</span>`;
     }
     t.innerHTML=`<div class="thead"><span class="${led}"></span>
-        <span class="ttl">${esc(s.title)}</span>
+        <span class="ttl">${esc(s.title)}</span>${s.task?`<span class="tsk">▸ ${esc(s.task)}</span>`:""}
         ${managed?'<span class="tag mgd">géré</span>':'<span class="tag cam">'+esc(s.model)+'</span>'}
         ${clients}<span class="tid mono">${esc(s.id).slice(0,12)}</span></div>
       <div class="tbody">${body}</div><div class="tfoot">${foot}</div>`;
@@ -603,6 +639,75 @@ setInterval(()=>{if(G.on)api("/api/graph").then(d=>{const old=new Map(G.nodes.ma
   const cv=$("#gcanvas");G.nodes=d.nodes.map((n,i)=>{const o=old.get(n.id);const a=i/Math.max(d.nodes.length,1)*6.283;
     return Object.assign({x:o?o.x:cv.clientWidth/2+Math.cos(a)*200,y:o?o.y:cv.clientHeight/2+Math.sin(a)*200,vx:0,vy:0},n);});
   G.edges=d.edges;}).catch(()=>{});},8000);
+
+/* ================= STUDIO (fichiers · terminal · agent) ================= */
+let fsState={path:"",term:localStorage.getItem("nw_st_term")||"",agent:localStorage.getItem("nw_st_agent")||"",on:false};
+$("#btn-studio").onclick=()=>{fsState.on?closeStudio():openStudio();};
+function openStudio(){closeGraph();closeScreens();$("#stage").style.display="none";$("#studio").style.display="block";
+  $("#btn-studio").classList.add("on");fsState.on=true;fsGo(fsState.path||"");stFill();}
+function closeStudio(){fsState.on=false;$("#studio").style.display="none";$("#stage").style.display="block";$("#btn-studio").classList.remove("on");}
+window.closeStudio=closeStudio;
+async function fsGo(path){
+  const d=await api("/api/fs/list?path="+encodeURIComponent(path||""));
+  if(d.error){toast(d.error);return;}
+  fsState.path=d.path;
+  $("#fs-crumb").textContent=d.path.replace("/Users/codenolimits-dreamai-nanach","~");
+  $("#fs-crumb").onclick=()=>fsGo(d.parent);
+  let h=`<div class="fs-it" onclick="fsGo('${esc(d.parent)}')">⬆️ ..</div>`;
+  for(const x of d.dirs)h+=`<div class="fs-it" onclick="fsGo('${esc(d.path+"/"+x)}')">📁 ${esc(x)}</div>`;
+  for(const f of d.files)h+=`<div class="fs-it" onclick="fsOpen('${esc(d.path+"/"+f.n)}')">📄 ${esc(f.n)}<span class="sz">${f.s>1e6?(f.s/1e6).toFixed(1)+"M":Math.ceil(f.s/1024)+"K"}</span></div>`;
+  $("#fs-list").innerHTML=h;
+}
+window.fsGo=fsGo;
+window.fsOpen=async function(path){
+  const d=await api("/api/fs/read?path="+encodeURIComponent(path));
+  const pv=$("#fs-prev");pv.style.display="flex";
+  const name=path.split("/").pop();
+  const sendBtns=`<button class="icon" onclick="fsSend('term','${esc(path)}')" title="envoyer au terminal">→🖥️</button>
+    <button class="icon" onclick="fsSend('agent','${esc(path)}')" title="envoyer à l'agent">→🤖</button>`;
+  if(d.text!==undefined){
+    pv.innerHTML=`<div class="st-h">📄 ${esc(name)} ${sendBtns}<button class="icon" onclick="fsSave('${esc(path)}')" title="sauver">💾</button><button class="icon" onclick="$('#fs-prev').style.display='none'">✕</button></div><textarea id="fs-ta">${esc(d.text)}</textarea>`;
+  }else{
+    pv.innerHTML=`<div class="st-h">📄 ${esc(name)} ${sendBtns}<button class="icon" onclick="$('#fs-prev').style.display='none'">✕</button></div><div class="st-body" style="color:var(--dim)">${d.binary?"binaire":"fichier volumineux"} · ${(d.size/1e6).toFixed(1)} Mo — envoie le CHEMIN au terminal/agent avec les boutons ci-dessus.</div>`;
+  }
+};
+window.fsSave=async function(path){
+  const r=await api("/api/fs/write",POST({path,content:$("#fs-ta").value}));
+  toast(r.ok?"💾 sauvé ("+r.size+" o) — backup .bak-wall":(r.reason||"échec"));
+};
+window.fsSend=async function(which,path){
+  const t=which==="term"?fsState.term:fsState.agent;
+  if(!t){toast("Choisis d'abord un "+(which==="term"?"terminal":"agent"));return;}
+  const r=await api("/api/fs/send",POST({path,target:t}));
+  toast(r.ok?"📄 → "+t+" ✓":(r.reason||"échec"));
+};
+function stFill(){
+  const opts=s=>'<option value="">—</option>'+S.sessions.filter(x=>x.kind==="managed").map(x=>`<option value="${x.id}" ${x.id===s?"selected":""}>${esc(x.title)}</option>`).join("");
+  $("#st-term").innerHTML=opts(fsState.term);$("#st-agent").innerHTML=opts(fsState.agent);
+  stRefresh();
+}
+window.stPick=function(which,val){fsState[which]=val;localStorage.setItem("nw_st_"+which,val);stRefresh();};
+window.stSpawn=async function(which){
+  const mode=which==="agent"?(prompt("Mode agent ? (opus / fable / opus-dngrok / grok / grok-dngrok)","opus-dngrok")||"opus-dngrok"):"opus";
+  const name=(which==="agent"?"agent":"studio")+"-"+(Date.now()%1000);
+  const r=await api("/api/spawn",POST({name,mode,cwd:fsState.path||null}));
+  if(r.tmux){fsState[which]=r.tmux;localStorage.setItem("nw_st_"+which,r.tmux);toast("Lancé "+r.tmux);setTimeout(()=>{load().then(stFill);},900);}
+};
+window.stSend=async function(which){
+  const input=$(which==="term"?"#st-term-in":"#st-agent-in");const t=fsState[which];
+  const txt=(input.value||"").trim();if(!txt||!t)return;
+  const r=await api("/api/inject",POST({target:t,text:txt}));
+  if(r.ok){input.value="";}else toast(r.reason||"échec");
+};
+["st-term-in","st-agent-in"].forEach((id,i)=>{const el=document.getElementById(id);el.onkeydown=e=>{if(e.key==="Enter")stSend(i===0?"term":"agent");};});
+function stRefresh(){
+  if(!fsState.on)return;
+  for(const [key,camId] of [["term","st-term-cam"],["agent","st-agent-cam"]]){
+    const s=S.sessions.find(x=>x.id===fsState[key]);
+    if(s&&s.capture)document.getElementById(camId).innerHTML=ansiToHtml(s.capture);
+  }
+}
+setInterval(stRefresh,3000);
 
 load();setInterval(load,4000);
 </script>
