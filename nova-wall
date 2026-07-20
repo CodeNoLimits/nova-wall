@@ -13,6 +13,8 @@ else
   nohup "$PY" "$ROOT/server.py" >"$ROOT/state/server.log" 2>&1 &
   for i in $(seq 1 20); do curl -s -o /dev/null -m 1 "$URL/api/sessions" && break; sleep 0.3; done
 fi
+# helper navigateur (tuiles Chrome embarquées) — démarre si absent
+curl -s -o /dev/null -m2 http://127.0.0.1:8792/health 2>/dev/null || nohup "$PY" "$ROOT/browser_helper.py" >"$ROOT/state/browser_helper.log" 2>&1 &
 echo "════════════════════════════════════════"
 echo "  NOVA WALL  →  $URL"
 echo "  (ouvre-le sur ton écran en haut à droite ; ＋ Terminal pour lancer une session)"

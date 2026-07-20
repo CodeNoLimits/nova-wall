@@ -1,0 +1,36 @@
+#!/bin/bash
+# NOVA WALL — CLI chef d'orchestre. Pilote le mur en HEADLESS (toute session/agent, David absent ou non).
+# Le mur EST une API : ce CLI = le bâton du chef. (Playwright/CDP sert le VISUEL ; l'API sert le CONTRÔLE.)
+API="${NOVA_WALL_API:-http://127.0.0.1:8790}"
+J() { curl -s -X POST "$API$1" -H "Content-Type: application/json" -d "$2"; }
+cmd="${1:-help}"; shift 2>/dev/null
+case "$cmd" in
+  sessions) curl -s "$API/api/sessions" | /opt/homebrew/bin/python3 -c "import sys,json
+for s in json.load(sys.stdin)['sessions']: print(f\"{s['id']:<24} {s['kind']:<8} {s['model']:<14} {'●' if s['live'] else '·'} {s['title']}\")";;
+  inject)   J /api/inject   "{\"target\":\"$1\",\"text\":\"$2\"}";;
+  spawn)    J /api/spawn    "{\"name\":\"$1\",\"mode\":\"${2:-opus}\",\"cwd\":\"${3:-}\"}";;
+  setmode)  J /api/setmode  "{\"target\":\"$1\",\"mode\":\"$2\"}";;
+  sub)      J /api/subsession "{\"parent\":\"$1\",\"kind\":\"${2:-feature}\"}";;
+  loop)     J /api/loop/start "{\"target\":\"$1\",\"text\":\"$2\",\"interval\":${3:-60}}";;
+  kill)     J /api/kill     "{\"target\":\"$1\"}";;
+  link)     J /api/link     "{\"from\":\"$1\",\"to\":\"$2\",\"type\":\"${3:-inject}\"}";;
+  b-tabs)   curl -s "$API/api/browser/tabs" | /opt/homebrew/bin/python3 -m json.tool;;
+  b-shot)   curl -s "$API/api/browser/shot?t=$1" -o "${2:-/tmp/nova_shot.jpg}"; echo "→ ${2:-/tmp/nova_shot.jpg}";;
+  b-nav)    J /api/browser/nav "{\"t\":\"$1\",\"url\":\"$2\"}";;
+  b-type)   J /api/browser/type "{\"t\":\"$1\",\"text\":\"$2\"}"; J /api/browser/key "{\"t\":\"$1\",\"key\":\"Enter\"}";;
+  b-open)   J /api/browser/open "{\"url\":\"$1\"}";;
+  *) cat <<EOF
+NOVA WALL — chef d'orchestre (headless). API=$API
+  nova-wall-ctl sessions
+  nova-wall-ctl inject  <tmux> "<msg>"          # écrire dans un terminal géré
+  nova-wall-ctl spawn   <nom> [mode] [cwd]      # opus|sonnet|fable|opus-dngrok|grok…
+  nova-wall-ctl setmode <tmux> <mode>
+  nova-wall-ctl sub     <parent> [feature|troubleshoot|verify]
+  nova-wall-ctl loop    <tmux> "<msg>" [sec]
+  nova-wall-ctl link    <from> <to> [inject|bridge|learn]
+  nova-wall-ctl kill    <tmux>
+  nova-wall-ctl b-tabs                          # onglets Chrome
+  nova-wall-ctl b-shot  <clé> [out.jpg]         # screenshot onglet
+  nova-wall-ctl b-nav   <clé> <url> | b-type <clé> "<txt>" | b-open <url>
+EOF;;
+esac

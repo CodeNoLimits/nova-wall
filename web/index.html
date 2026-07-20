@@ -111,7 +111,23 @@ body.listmode .goal{max-height:40px}
 .picker b{font-size:12.5px}.picker span{font-size:11px;color:var(--dim)}
 #zterm{font-size:12px;line-height:1.4;background:#03060a;border:1px solid #10251a;border-radius:10px;padding:12px;
   max-height:48vh;overflow:auto;white-space:pre-wrap;color:#8affc0}
+/* ---- mode Écrans (workspace) ---- */
+#workspace{position:absolute;inset:54px 0 0 0;display:flex;flex-direction:column;overflow:hidden}
+.ws-bar{display:flex;align-items:center;gap:8px;padding:8px 14px;border-bottom:1px solid var(--border);background:rgba(0,0,0,.3);flex-wrap:wrap}
+.ws-bar .wsp{padding:5px 11px} .ws-bar .wsp.on{background:rgba(34,211,238,.16);border-color:var(--cyan);color:#dffaff}
+.ws-grid{flex:1;display:grid;gap:8px;padding:10px;overflow:auto;min-height:0}
+.ws-grid.l1{grid-template-columns:1fr}
+.ws-grid.l2{grid-template-columns:1fr 1fr}
+.ws-grid.l4{grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr}
+.ws-grid.l6{grid-template-columns:1fr 1fr 1fr;grid-template-rows:1fr 1fr}
+.wslot{background:var(--panel);border:1px solid var(--border2);border-radius:12px;overflow:hidden;display:flex;flex-direction:column;min-height:200px}
+.wslot.empty{align-items:center;justify-content:center;border-style:dashed;min-height:200px}
+.wslot-h{display:flex;align-items:center;gap:8px;padding:6px 10px;border-bottom:1px solid var(--border);background:rgba(0,0,0,.28);font-size:12px;font-weight:600}
+.wslot-h button{margin-left:auto;padding:3px 7px;font-size:11px}
+.wsimg{flex:1;width:100%;object-fit:contain;object-position:top center;background:#000;cursor:crosshair;min-height:0}
+.wslot .writerow{padding:6px} .wslot pre.cam{flex:1;max-height:none}
 @media (max-width:760px){
+  .ws-grid.l2,.ws-grid.l4,.ws-grid.l6{grid-template-columns:1fr!important;grid-template-rows:none!important}
   #wall{grid-template-columns:1fr!important;gap:10px;padding:10px}
   .tile{min-height:auto}
   header{gap:8px} .stat{display:none}
@@ -134,6 +150,7 @@ body.listmode .goal{max-height:40px}
     <button id="btn-list" title="Vue liste (projets + vert/rouge)">📋 Liste</button>
     <button id="btn-link" title="Mode liaison n8n">🔗 Liaisons</button>
     <button id="btn-fuse" title="Fusionner 2 sessions">⧉ Fusion</button>
+    <button id="btn-screens" title="Mode Écrans (4-up + pages + Chrome embarqué)">🖥️ Écrans</button>
     <button id="btn-help" title="Comment ça marche">❓</button>
     <button id="btn-new" class="primary">＋ Terminal</button>
     <button id="btn-pop" title="2ᵉ écran">⧉⧉</button>
@@ -141,6 +158,7 @@ body.listmode .goal{max-height:40px}
 </header>
 
 <div id="stage"><svg id="arrows"></svg><div id="wall"></div></div>
+<div id="workspace" style="display:none"></div>
 
 <!-- new terminal -->
 <div class="overlay" id="ov-new"><div class="modal">
@@ -435,6 +453,61 @@ $("#filter").oninput=e=>{S.filter=e.target.value;render();};
 window.closeOv=()=>{document.querySelectorAll(".overlay").forEach(o=>o.classList.remove("show"));S.zoomId=null;clearInterval(S.zoomTimer);};
 document.querySelectorAll(".overlay").forEach(o=>o.onclick=e=>{if(e.target===o)closeOv();});
 $("#stage").onscroll=drawArrows;window.onresize=drawArrows;
+
+/* ================= MODE ÉCRANS (workspace : 4-up + pages + Chrome embarqué) ================= */
+const BR_PRESETS=[{label:"Grok",key:"grok.com"},{label:"Gemini",key:"gemini.google"},{label:"NotebookLM",key:"notebooklm"},{label:"AI Studio",key:"aistudio"},{label:"Claude",key:"claude.ai"},{label:"Gmail",key:"mail.google"}];
+let WS=JSON.parse(localStorage.getItem("nw_ws")||"null")||{pages:[{layout:4,slots:[]}],cur:0};
+const wsSave=()=>localStorage.setItem("nw_ws",JSON.stringify(WS));
+const wsPage=()=>WS.pages[WS.cur];
+let wsTimer=null;
+function openScreens(){$("#workspace").style.display="block";$("#stage").style.display="none";$("#btn-screens").classList.add("on");renderWS();clearInterval(wsTimer);wsTimer=setInterval(refreshWS,2500);}
+function closeScreens(){$("#workspace").style.display="none";$("#stage").style.display="block";$("#btn-screens").classList.remove("on");clearInterval(wsTimer);}
+window.closeScreens=closeScreens;
+$("#btn-screens").onclick=()=>{$("#workspace").style.display==="none"?openScreens():closeScreens();};
+
+function termOptions(){return S.sessions.filter(s=>s.kind==="managed").map(s=>`<option value="term:${s.id}">🖥️ ${esc(s.title)}</option>`).join("");}
+function browserOptions(){return BR_PRESETS.map(b=>`<option value="br:${b.key}:${b.label}">🌐 ${b.label}</option>`).join("");}
+window.wsAssign=function(idx,val){const pg=wsPage();
+  if(!val)pg.slots[idx]=null;
+  else if(val==="url"){const u=prompt("URL à ouvrir dans une tuile Chrome:","https://");if(!u)return;api("/api/browser/open",POST({url:u}));pg.slots[idx]={kind:"browser",key:u.replace(/^https?:\/\//,"").split("/")[0],label:"URL"};}
+  else if(val.startsWith("term:"))pg.slots[idx]={kind:"term",key:val.slice(5)};
+  else if(val.startsWith("br:")){const p=val.split(":");pg.slots[idx]={kind:"browser",key:p[1],label:p[2]};}
+  wsSave();renderWS();};
+window.wsLayout=function(n){wsPage().layout=n;wsSave();renderWS();};
+window.wsAddPage=function(){WS.pages.push({layout:4,slots:[]});WS.cur=WS.pages.length-1;wsSave();renderWS();};
+window.wsGoPage=function(i){WS.cur=i;renderWS();};
+
+function slotPicker(idx){return `<select onchange="wsAssign(${idx},this.value)"><option value="">＋ choisir…</option><optgroup label="Terminaux gérés">${termOptions()}</optgroup><optgroup label="Navigateurs (onglets Chrome)">${browserOptions()}</optgroup><option value="url">🌐 URL personnalisée…</option></select>`;}
+function renderWS(){
+  const w=$("#workspace"),pg=wsPage(),n=pg.layout;
+  while(pg.slots.length<n)pg.slots.push(null);
+  const tabs=WS.pages.map((p,i)=>`<button class="wsp ${i===WS.cur?'on':''}" onclick="wsGoPage(${i})">Page ${i+1}</button>`).join("");
+  const lay=[1,2,4,6].map(x=>`<button class="${n===x?'on':''}" onclick="wsLayout(${x})">${x===4?'4-up':x}</button>`).join("");
+  let slots="";
+  for(let i=0;i<n;i++){const sl=pg.slots[i];
+    if(!sl){slots+=`<div class="wslot empty">${slotPicker(i)}</div>`;continue;}
+    if(sl.kind==="term"){const s=S.sessions.find(x=>x.id===sl.key);
+      slots+=`<div class="wslot" data-term="${esc(sl.key)}"><div class="wslot-h">🖥️ ${esc(s?s.title:sl.key)}<button onclick="wsAssign(${i},'')">✕</button></div>
+        <pre class="cam">${s&&s.capture?ansiToHtml(s.capture):"(terminal…)"}</pre>
+        <div class="writerow"><input placeholder="écrire… (Entrée)" onkeydown="if(event.key==='Enter')wsTermSend('${esc(sl.key)}',this)"><button onclick="wsTermSend('${esc(sl.key)}',this.previousElementSibling)">➤</button></div></div>`;
+    }else{
+      slots+=`<div class="wslot"><div class="wslot-h">🌐 ${esc(sl.label)} <span style="color:var(--dimmer);font-size:10px;font-weight:400">${esc(sl.key)}</span><button onclick="wsAssign(${i},'')">✕</button></div>
+        <img class="wsimg" data-key="${esc(sl.key)}" onclick="wsBrowserClick(event,'${esc(sl.key)}')" src="/api/browser/shot?t=${encodeURIComponent(sl.key)}" onerror="this.style.opacity=.3">
+        <div class="writerow"><input placeholder="taper dans la page… (Entrée)" onkeydown="if(event.key==='Enter')wsBrowserType('${esc(sl.key)}',this)"><button onclick="wsBrowserType('${esc(sl.key)}',this.previousElementSibling)">➤</button></div></div>`;
+    }
+  }
+  w.innerHTML=`<div class="ws-bar"><b>🖥️ Écrans</b><span class="seg">${lay}</span><span style="flex:1"></span>${tabs}<button class="wsp" onclick="wsAddPage()" title="nouvelle page">＋</button><button onclick="closeScreens()">✕ quitter</button></div><div class="ws-grid l${n}">${slots}</div>`;
+  refreshWS();
+}
+function refreshWS(){
+  if($("#workspace").style.display==="none")return;
+  document.querySelectorAll('.wslot[data-term]').forEach(el=>{const s=S.sessions.find(x=>x.id===el.dataset.term);const pre=el.querySelector('pre.cam');if(s&&s.capture&&pre&&document.activeElement!==el.querySelector('input'))pre.innerHTML=ansiToHtml(s.capture);});
+  document.querySelectorAll('.wsimg').forEach(img=>{img.src="/api/browser/shot?t="+encodeURIComponent(img.dataset.key)+"&_="+Date.now()+qk("").replace("?","&");});
+}
+window.wsTermSend=async function(key,input){const t=(input.value||"").trim();if(!t)return;const r=await api("/api/inject",POST({target:key,text:t}));if(r.ok)input.value="";else toast(r.reason||"échec");};
+window.wsBrowserClick=async function(ev,key){const img=ev.currentTarget,r=img.getBoundingClientRect();await api("/api/browser/click",POST({t:key,x:ev.clientX-r.left,y:ev.clientY-r.top,w:r.width,h:r.height}));setTimeout(()=>{img.src="/api/browser/shot?t="+encodeURIComponent(key)+"&_="+Date.now();},450);};
+window.wsBrowserType=async function(key,input){const t=(input.value||"").trim();if(!t)return;await api("/api/browser/type",POST({t:key,text:t}));await api("/api/browser/key",POST({t:key,key:"Enter"}));input.value="";};
+
 load();setInterval(load,4000);
 </script>
 </body>

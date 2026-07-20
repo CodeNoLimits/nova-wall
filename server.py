@@ -6,7 +6,7 @@ Mur de vidéosurveillance : chaque case = une "caméra" sur un terminal.
 - Caméra live + injection/bridge/fusion/loop/modèle : sessions gérées par NOVA WALL en tmux.
 Stdlib only. Anti-vol-de-focus (tmux send-keys = tape DANS le pty, jamais au niveau OS).
 """
-import os, re, json, time, glob, subprocess, threading
+import os, re, json, time, glob, subprocess, threading, urllib.request
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 
@@ -320,6 +320,16 @@ class H(BaseHTTPRequestHandler):
             return json.loads(self.rfile.read(n) or b"{}")
         except Exception: return {}
 
+    def _proxyb(self, method, path, body=None):
+        # proxy vers le helper navigateur (8792) => tuiles Chrome accessibles aussi via le tunnel mobile
+        try:
+            req = urllib.request.Request("http://127.0.0.1:8792" + path, data=body, method=method)
+            if body: req.add_header("Content-Type", "application/json")
+            with urllib.request.urlopen(req, timeout=15) as r:
+                return self._send(200, r.read(), r.headers.get("Content-Type", "application/json"))
+        except Exception as e:
+            return self._send(502, {"error": "browser helper down", "detail": str(e)[:100]})
+
     def do_GET(self):
         u = urlparse(self.path); p = u.path
         if p in ("/", "/index.html"):
@@ -344,6 +354,10 @@ class H(BaseHTTPRequestHandler):
             return self._send(404, {"error": "not found"})
         if p == "/api/links":
             return self._send(200, jload(LINKS_F, {"edges": []}))
+        if p == "/api/browser/tabs":
+            return self._proxyb("GET", "/tabs")
+        if p == "/api/browser/shot":
+            return self._proxyb("GET", "/shot?" + u.query)
         return self._send(404, {"error": "no route"})
 
     def _tail_summary(self, sid):
@@ -420,6 +434,8 @@ class H(BaseHTTPRequestHandler):
             jsave(LINKS_F, links); return self._send(200, {"ok": True})
         if p == "/api/link/run":
             return self._send(200, self._run_link(d))
+        if p.startswith("/api/browser/"):
+            return self._proxyb("POST", "/" + p.split("/api/browser/", 1)[1], json.dumps(d).encode())
         return self._send(404, {"error": "no route"})
 
     def _ctx_of(self, sid):
